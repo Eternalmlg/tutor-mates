@@ -1,0 +1,16 @@
+ID_Alumno,Perfil_DUA,Faltas_Acumuladas,Nota_Media,Asistencia_Hoy,Observaciones_Docente
+ALU_01,Estándar,1,6.5,True,Evolución positiva en álgebra y cálculo elemental; participa de forma regular.
+ALU_02,Refuerzo_Calculo,5,3.8,False,Dificultad acusada con fracciones y jerarquía de operaciones. Absentismo reiterado los viernes.
+ALU_03,Altas_Capacidades,0,9.6,True,Resuelve tareas rápidamente y con rigor abstracto; requiere retos de profundización.
+ALU_04,TDAH_Adaptacion,2,5.2,True,Requiere enunciados fragmentados y temporizador de foco; pierde atención en tareas monótonas.
+ALU_05,Discalculia_Leve,3,4.3,True,Precisa apoyo visual y tablas de referencia para la operativa básica; buena actitud de superación.
+ALU_06,Estándar,2,7.1,True,Buen nivel de abstracción; trabajo autónomo y constante en resolución de problemas.
+ALU_07,Refuerzo_Calculo,6,3.2,False,Bajo rendimiento estrechamente ligado a faltas continuadas; pendiente entrega de tareas de recuperación.
+ALU_08,Estándar,0,8.0,True,Metódico y ordenado en la exposición y justificación de procedimientos matemáticos.
+ALU_09,TDAH_Adaptacion,1,6.0,True,Rinde notablemente mejor cuando se le permite estructurar la resolución en pasos numerados.
+ALU_10,Altas_Capacidades,1,9.1,True,Gran capacidad de deducción lógica y formulación de conjeturas; excelente tutor entre iguales.
+ALU_11,Estándar,3,5.8,True,Comprensión global adecuada del temario; requiere afianzar despejes en ecuaciones de primer grado.
+ALU_12,Discalculia_Leve,2,4.7,True,Confusión habitual con signos y posiciones numéricas; responde positivamente con guía gráfica.
+ALU_13,Refuerzo_Calculo,4,4.0,True,En umbral de aprobado; muestra buena predisposición en dinámicas cooperativas estructuradas.
+ALU_14,Estándar,1,7.4,True,Progreso sólido y buena asimilación de conceptos en geometría analítica y álgebra.
+ALU_15,Estándar,5,4.5,False,Faltas no justificadas en las primeras sesiones del día; riesgo de descolgarse del ritmo de clase.

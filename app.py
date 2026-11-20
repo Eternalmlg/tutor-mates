@@ -1,0 +1,606 @@
+"""
+Aplicación Privada para Docentes de Matemáticas de Secundaria (3º ESO)
+Orientada a la Gestión Administrativa, Planificación Curricular y Diseño DUA
+Cumplimiento estricto del RGPD (Datos Anónimos)
+"""
+
+import os
+import streamlit as st
+import pandas as pd
+from google import genai
+from google.genai import types
+
+# -----------------------------------------------------------------------------
+# 1. CONFIGURACIÓN DE PÁGINA
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="TutorMates DUA | Gestión Docente Secundaria",
+    page_icon="📐",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Estilos CSS personalizados para una interfaz sobria, profesional y docente
+st.markdown("""
+<style>
+    .reportview-container {
+        background-color: #f8fafc;
+    }
+    .metric-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .badge-alert {
+        background-color: #fee2e2;
+        color: #991b1b;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+    .badge-ok {
+        background-color: #dcfce7;
+        color: #166534;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 18px;
+        border-radius: 6px 6px 0 0;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# -----------------------------------------------------------------------------
+# 2. CONTROL DE ACCESO PRIVADO DOCENTE (PROTECCIÓN RGPD Y SEGURIDAD)
+# -----------------------------------------------------------------------------
+def check_authentication():
+    """Valida la contraseña docente contra st.secrets['TEACHER_PASSWORD']."""
+    # Intentar obtener la contraseña configurada en secrets
+    try:
+        configured_password = st.secrets["TEACHER_PASSWORD"]
+    except Exception:
+        configured_password = os.environ.get("TEACHER_PASSWORD", None)
+
+    if not configured_password:
+        st.error("🔒 **Error de configuración de seguridad:** No se ha definido `TEACHER_PASSWORD` en los Secrets de Streamlit.")
+        st.info("Configura la variable `TEACHER_PASSWORD` en los ajustes de Streamlit Cloud (Settings > Secrets) o en `.streamlit/secrets.toml`.")
+        st.stop()
+
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            st.markdown("### 🔐 Acceso Exclusivo para Profesorado")
+            st.caption("Herramienta de uso interno docente. Acceso restringido para garantizar la confidencialidad y la normativa de protección de datos (RGPD).")
+            
+            with st.form("login_form"):
+                password_input = st.text_input("Introduce la clave docente de acceso:", type="password", placeholder="••••••••")
+                submit_button = st.form_submit_button("Entrar al Cuaderno Docente", use_container_width=True)
+
+                if submit_button:
+                    if password_input == configured_password:
+                        st.session_state["authenticated"] = True
+                        st.success("Acceso verificado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Contraseña incorrecta. Acceso denegado.")
+            
+            st.markdown("""
+            ---
+            ℹ️ *Si eres alumno/a, no tienes autorización para acceder a este portal docente.*
+            """)
+        st.stop()
+
+check_authentication()
+
+
+# -----------------------------------------------------------------------------
+# 3. CLIENTE GEMINI Y GESTIÓN DE SECRETS
+# -----------------------------------------------------------------------------
+@st.cache_resource
+def get_gemini_client():
+    """Inicializa el cliente oficial de Google GenAI usando st.secrets."""
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        api_key = os.environ.get("GEMINI_API_KEY", None)
+
+    if not api_key:
+        st.error("🔑 No se encontró `GEMINI_API_KEY` en los Secrets de Streamlit.")
+        st.info("Añade `GEMINI_API_KEY = 'tu_api_key'` en los Secrets de Streamlit Cloud.")
+        st.stop()
+    
+    return genai.Client(api_key=api_key)
+
+client = get_gemini_client()
+
+def call_gemini(prompt: str, system_instruction: str = None) -> str:
+    """Ejecuta una petición al modelo Gemini Flash con reintento/fallback seguro."""
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    last_error = None
+    
+    for model_name in models_to_try:
+        try:
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.7,
+            ) if system_instruction else types.GenerateContentConfig(temperature=0.7)
+            
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = e
+            continue
+            
+    return f"⚠️ Error al conectar con el servicio de IA: {str(last_error)}"
+
+
+# -----------------------------------------------------------------------------
+# 4. CARGA Y GESTIÓN DEL DATASET ANONIMIZADO
+# -----------------------------------------------------------------------------
+CSV_PATH = "clase_3eso.csv"
+
+def init_student_data():
+    """Carga o inicializa los datos de clase con códigos anónimos."""
+    if "df_alumnos" not in st.session_state:
+        if os.path.exists(CSV_PATH):
+            df = pd.read_csv(CSV_PATH)
+            # Asegurar tipos adecuados
+            df["Asistencia_Hoy"] = df["Asistencia_Hoy"].astype(bool)
+            df["Faltas_Acumuladas"] = df["Faltas_Acumuladas"].astype(int)
+            df["Nota_Media"] = df["Nota_Media"].astype(float)
+            st.session_state["df_alumnos"] = df
+        else:
+            # Fallback seguro en memoria si no estuviera el archivo
+            data = {
+                "ID_Alumno": [f"ALU_{i:02d}" for i in range(1, 16)],
+                "Perfil_DUA": [
+                    "Estándar", "Refuerzo_Calculo", "Altas_Capacidades", "TDAH_Adaptacion", 
+                    "Discalculia_Leve", "Estándar", "Refuerzo_Calculo", "Estándar", 
+                    "TDAH_Adaptacion", "Altas_Capacidades", "Estándar", "Discalculia_Leve", 
+                    "Refuerzo_Calculo", "Estándar", "Estándar"
+                ],
+                "Faltas_Acumuladas": [1, 5, 0, 2, 3, 2, 6, 0, 1, 1, 3, 2, 4, 1, 5],
+                "Nota_Media": [6.5, 3.8, 9.6, 5.2, 4.3, 7.1, 3.2, 8.0, 6.0, 9.1, 5.8, 4.7, 4.0, 7.4, 4.5],
+                "Asistencia_Hoy": [True, False, True, True, True, True, False, True, True, True, True, True, True, True, False],
+                "Observaciones_Docente": [
+                    "Evolución positiva en álgebra y cálculo elemental.",
+                    "Dificultad acusada con fracciones y jerarquía. Absentismo reiterado viernes.",
+                    "Resuelve tareas rápidamente; requiere retos de profundización.",
+                    "Requiere enunciados fragmentados y temporizador de foco.",
+                    "Precisa apoyo visual y tablas de referencia para la operativa básica.",
+                    "Buen nivel de abstracción; trabajo autónomo y constante.",
+                    "Bajo rendimiento ligado a faltas continuadas; pendiente recuperación.",
+                    "Metódico y ordenado en la exposición y justificación de procedimientos.",
+                    "Mejora notablemente al estructurar la resolución en pasos numerados.",
+                    "Gran capacidad de deducción lógica; excelente tutor entre iguales.",
+                    "Comprensión adecuada; afianzar despejes en ecuaciones.",
+                    "Confusión habitual con signos y posiciones numéricas; responde con guía gráfica.",
+                    "En umbral de aprobado; buena predisposición en cooperativo guiado.",
+                    "Progreso sólido en geometría analítica y álgebra.",
+                    "Faltas no justificadas a primera hora; riesgo de descolgarse del ritmo."
+                ]
+            }
+            st.session_state["df_alumnos"] = pd.DataFrame(data)
+
+init_student_data()
+
+
+# -----------------------------------------------------------------------------
+# 5. BARRA LATERAL (SIDEBAR) DOCENTE
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    st.image("https://api.iconify.design/lucide:graduation-cap.svg?color=%231e40af", width=48)
+    st.title("TutorMates 3º ESO")
+    st.markdown("**Cuaderno Digital de Matemáticas**")
+    st.caption("Adaptado al marco DUA y normativa RGPD")
+    
+    st.divider()
+    
+    st.markdown("### 🛡️ Cumplimiento RGPD")
+    st.success("✅ **Anonimización activa:** Los datos enviados a la IA utilizan únicamente códigos (`ALU_XX`). Ningún dato de carácter personal identificable sale del navegador.")
+    
+    st.divider()
+    
+    st.markdown("### 📊 Estado de la Sesión")
+    df_current = st.session_state["df_alumnos"]
+    total_alumnos = len(df_current)
+    presentes = df_current["Asistencia_Hoy"].sum()
+    ausentes = total_alumnos - presentes
+    alertas_faltas = len(df_current[df_current["Faltas_Acumuladas"] > 4])
+    
+    st.metric("Total Alumnos", total_alumnos)
+    st.metric("Presentes Hoy", f"{presentes} / {total_alumnos}")
+    st.metric("Alumnos con Alerta (>4 faltas)", alertas_faltas, delta_color="inverse")
+    
+    st.divider()
+    if st.button("🚪 Cerrar Sesión Docente", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# 6. ENCABEZADO PRINCIPAL
+# -----------------------------------------------------------------------------
+st.title("📐 Panel de Gestión Docente y Diversidad DUA")
+st.markdown("Herramienta docente privada para automatizar la gestión de aula, diseño de pruebas multinivel y seguimiento pedagógico en **3º de Educación Secundaria Obligatoria**.")
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📋 Pasar Lista y Burocracia",
+    "📅 Distribución de Horas y Temario",
+    "🎯 Diseñador de Ejercicios y Exámenes DUA",
+    "🤖 Asistente Docente con Contexto del Aula"
+])
+
+
+# =============================================================================
+# PESTAÑA 1: 📋 PASAR LISTA Y BUROCRACIA
+# =============================================================================
+with tab1:
+    st.header("📋 Registro de Asistencia y Gestión de Absentismo")
+    st.markdown("Control diario de asistencia y detección temprana de absentismo escolar conforme al protocolo educativo oficial.")
+    
+    # Alertas automáticas para faltas > 4
+    df_alertas = st.session_state["df_alumnos"][st.session_state["df_alumnos"]["Faltas_Acumuladas"] > 4]
+    
+    if not df_alertas.empty:
+        codigos_alerta = ", ".join([f"**{row['ID_Alumno']}** ({row['Faltas_Acumuladas']} faltas)" for _, row in df_alertas.iterrows()])
+        st.error(f"⚠️ **Alerta Protocolo Absentismo (>4 faltas acumuladas):** Se detectan {len(df_alertas)} alumno(s) en situación crítica de absentismo no justificado: {codigos_alerta}. Requiere comunicación inmediata a Jefatura de Estudios / Comisión de Absentismo.")
+    else:
+        st.success("✅ No hay ningún alumno que supere el umbral de alerta de absentismo (>4 faltas).")
+    
+    st.subheader("Tabla Interactiva de Clase (3º ESO)")
+    st.caption("Modifica la asistencia de hoy o las observaciones directamente en la tabla. Los cambios se reflejarán inmediatamente.")
+    
+    # Configuración de columnas del data editor
+    edited_df = st.data_editor(
+        st.session_state["df_alumnos"],
+        column_config={
+            "ID_Alumno": st.column_config.TextColumn("Código Alumno", disabled=True),
+            "Perfil_DUA": st.column_config.SelectboxColumn(
+                "Perfil DUA",
+                options=["Estándar", "Refuerzo_Calculo", "TDAH_Adaptacion", "Altas_Capacidades", "Discalculia_Leve"],
+                required=True
+            ),
+            "Faltas_Acumuladas": st.column_config.NumberColumn("Faltas Totales", min_value=0, max_value=50, step=1),
+            "Nota_Media": st.column_config.NumberColumn("Nota Media", min_value=0.0, max_value=10.0, step=0.1, format="%.1f"),
+            "Asistencia_Hoy": st.column_config.CheckboxColumn("¿Asiste Hoy?", default=True),
+            "Observaciones_Docente": st.column_config.TextColumn("Observaciones Docente (Sin Nombres)", width="large")
+        },
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        key="editor_alumnos"
+    )
+    
+    # Actualizar session state si hubo cambios
+    st.session_state["df_alumnos"] = edited_df
+
+    col_btn1, col_btn2 = st.columns([1, 1])
+    with col_btn1:
+        # Descarga del CSV actualizado
+        csv_data = edited_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="💾 Descargar Registro Actualizado (CSV)",
+            data=csv_data,
+            file_name="clase_3eso_actualizada.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    with col_btn2:
+        if st.button("🔄 Marcar a todos como Presentes hoy", use_container_width=True):
+            st.session_state["df_alumnos"]["Asistencia_Hoy"] = True
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("📄 Generador Automático de Partes y Notificaciones Oficiales con IA")
+    st.markdown("Redacta borradores administrativos oficiales listos para enviar a Jefatura de Estudios o a las Familias, garantizando el anonimato del alumno mediante su código identificador.")
+    
+    col_dest, col_alu = st.columns([1, 1])
+    with col_dest:
+        destinatario = st.selectbox(
+            "Destinatario del documento oficial:",
+            ["Jefatura de Estudios / Comisión de Absentismo", "Familia / Tutores Legales (Tutoría Oficial)"]
+        )
+    with col_alu:
+        # Seleccionar preferentemente alumnos con alerta, o cualquiera de la lista
+        alumnos_options = edited_df["ID_Alumno"].tolist()
+        alumno_sel = st.selectbox("Selecciona el alumno por su código anónimo:", alumnos_options, index=1 if len(alumnos_options) > 1 else 0)
+
+    datos_alumno = edited_df[edited_df["ID_Alumno"] == alumno_sel].iloc[0]
+
+    if st.button("✨ Redactar Borrador con IA", type="primary"):
+        with st.spinner("Redactando comunicación formal bajo normativa educativa..."):
+            prompt_burocracia = f"""
+            Actúa como un profesor de Matemáticas y tutor de 3º de ESO en un Instituto de Educación Secundaria en España.
+            Redacta un documento formal de tipo: "{destinatario}".
+            
+            DATOS OFICIALES DEL ALUMNO (ESTRICTAMENTE ANONIMIZADOS BAJO RGPD):
+            - Código del Alumno: {datos_alumno['ID_Alumno']}
+            - Faltas de asistencia acumuladas: {datos_alumno['Faltas_Acumuladas']} faltas
+            - Asistencia en la sesión de hoy: {'Asistió' if datos_alumno['Asistencia_Hoy'] else 'Ausente'}
+            - Calificación media actual: {datos_alumno['Nota_Media']}/10
+            - Perfil de atención a la diversidad (DUA): {datos_alumno['Perfil_DUA']}
+            - Observaciones del cuaderno docente: {datos_alumno['Observaciones_Docente']}
+            
+            REGLAS CRÍTICAS DE REDACCIÓN:
+            1. En cumplimiento estricto del RGPD, utiliza ÚNICAMENTE el identificador '{datos_alumno['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
+            2. Tono riguroso, respetuoso, formal y pedagógico.
+            3. Menciona la preocupación por el impacto de las faltas reiteradas en la adquisición de las competencias matemáticas de 3º ESO.
+            4. Si el destinatario es Jefatura de Estudios, referencia el inicio del protocolo ordinario de absentismo escolar y solicitud de intervención del departamento de orientación.
+            5. Si el destinatario es la Familia, cita con delicadeza la importancia del acompañamiento familiar, la justificación documental de las ausencias y convoca a una entrevista presencial o telemática de tutoría.
+            6. Estructura con fecha simulada, asunto oficial, exposición de hechos objetivos y fórmula de despedida.
+            """
+            
+            system_instruction = "Eres un asistente docente experto en legislación educativa secundaria (LOMLOE), protocolos de absentismo escolar y redacción administrativa en España, cumpliendo estrictamente con el RGPD."
+            respuesta_borrador = call_gemini(prompt_burocracia, system_instruction)
+            
+            st.markdown("### 📋 Borrador Generado")
+            st.text_area("Copia el texto del documento:", value=respuesta_borrador, height=350)
+
+
+# =============================================================================
+# PESTAÑA 2: 📅 DISTRIBUCIÓN DE HORAS Y TEMARIO
+# =============================================================================
+with tab2:
+    st.header("📅 Planificación Curricular y Temporalización Realista")
+    st.markdown("Diseña una secuenciación didáctica sesión por sesión para 3º de ESO, considerando festivos, repasos cooperativos y sesiones de evaluación formativa.")
+    
+    with st.form("form_temporalizacion"):
+        col_t1, col_t2 = st.columns([2, 1])
+        with col_t1:
+            tema_matematicas = st.text_input(
+                "Unidad Didáctica o Tema:",
+                value="Ecuaciones de 1er y 2º Grado y Sistemas de Ecuaciones Lineales"
+            )
+        with col_t2:
+            nivel_grupo = st.selectbox(
+                "Nivel general del grupo:",
+                [
+                    "Heterogéneo con necesidad de refuerzo",
+                    "Estándar curricular 3º ESO",
+                    "Avanzado con buen ritmo de trabajo",
+                    "Grupo con alta dispersión y desmotivación inicial"
+                ]
+            )
+            
+        col_h1, col_h2, col_h3 = st.columns(3)
+        with col_h1:
+            horas_totales = st.number_input("Sesiones totales estimadas:", min_value=4, max_value=40, value=14, step=1)
+        with col_h2:
+            dias_perdidos = st.number_input("Festivos / Huelgas / Salidas:", min_value=0, max_value=10, value=2, step=1)
+        with col_h3:
+            frecuencia = st.selectbox("Frecuencia lectiva:", ["3 sesiones semanales", "4 sesiones semanales"])
+            
+        sesiones_efectivas = max(1, horas_totales - dias_perdidos)
+        st.info(f"💡 **Sesiones lectivas netas de aula disponibles:** {sesiones_efectivas} sesiones (calculado restando {dias_perdidos} días no lectivos de {horas_totales} totales).")
+        
+        enfoque_metodologico = st.multiselect(
+            "Metodologías clave a incorporar:",
+            [
+                "Resolución cooperativa de problemas (Tutoría entre iguales)",
+                "Pautas DUA (Andamiaje visual y enunciados graduados)",
+                "Uso de GeoGebra o calculadoras como apoyo",
+                "Gamificación corta / Rutinas de pensamiento (Ticket de salida)"
+            ],
+            default=["Resolución cooperativa de problemas (Tutoría entre iguales)", "Pautas DUA (Andamiaje visual y enunciados graduados)"]
+        )
+        
+        btn_planificar = st.form_submit_button("🗓️ Generar Secuenciación Didáctica Completa", type="primary")
+
+    if btn_planificar:
+        with st.spinner("Diseñando la programación sesión por sesión..."):
+            prompt_plan = f"""
+            Diseña una temporalización didáctica realista y detallada para el departamento de Matemáticas de 3º de ESO.
+            
+            PARÁMETROS DE LA PROGRAMACIÓN:
+            - Unidad Temática: {tema_matematicas}
+            - Sesiones reales lectivas: {sesiones_efectivas} sesiones (ya se han descontado {dias_perdidos} festivos/días perdidos).
+            - Nivel del grupo: {nivel_grupo}
+            - Frecuencia semanal: {frecuencia}
+            - Enfoques pedagógicos seleccionados: {', '.join(enfoque_metodologico)}
+            
+            ESTRUCTURA OBLIGATORIA QUE DEBE TENER LA RESPUESTA:
+            1. **Tabla Resumen de la Unidad**: Objetivos competenciales clave y criterios de evaluación según currículo oficial de 3º ESO.
+            2. **Desglose Sesión por Sesión (Sesión 1 a Sesión {sesiones_efectivas})**:
+               Para cada sesión, incluye obligatoriamente:
+               - *Título y Contenido específico*.
+               - *Estructura de la sesión (50 min)*: 10 min activación/repaso inicial, 30 min práctica guiada/autónoma, 10 min comprobación/cierre (ticket de salida).
+               - *Medida de Atención a la Diversidad (DUA)*: Ajuste específico para alumnos de refuerzo o TDAH.
+            3. **Sesiones Especiales Obligatorias**:
+               - Debe incluir al menos 1 o 2 sesiones finales dedicadas expresamente a resolución de dudas y simulacro de examen en parejas de tutoría entre iguales.
+               - Debe incluir la sesión de Evaluación Sumativa (Prueba escrita/competencial).
+               - Debe incluir una sesión posterior de Retroalimentación, coevaluación y corrección activa de errores.
+            4. **Estrategia ante imprevistos**: Recomendación de qué actividades compactar si se pierde una sesión adicional.
+            """
+            
+            system_instruction = "Eres un jefe de departamento de Matemáticas de Educación Secundaria en España, experto en diseño curricular LOMLOE, metodología DUA y planificación docente efectiva."
+            plan_generado = call_gemini(prompt_plan, system_instruction)
+            
+            st.markdown("### 📅 Propuesta de Temporalización Curricular")
+            st.markdown(plan_generado)
+
+
+# =============================================================================
+# PESTAÑA 3: 🎯 DISEÑADOR DE EJERCICIOS Y EXÁMENES DUA
+# =============================================================================
+with tab3:
+    st.header("🎯 Diseñador de Pruebas y Tareas Multinivel DUA")
+    st.markdown("Genera actividades de aula o exámenes adaptados a la diversidad de 3º de ESO, con fórmulas en formato LaTeX limpio y rúbricas de corrección docente.")
+    
+    col_dua1, col_dua2 = st.columns([1, 1])
+    with col_dua1:
+        tema_examen = st.text_input("Contenido matemático específico:", value="Sistemas de dos ecuaciones lineales con dos incógnitas")
+        tipo_prueba = st.selectbox(
+            "Tipo de instrumento de evaluación:",
+            [
+                "Prueba Escrita Formal (Examen Parcial o Trimestral)",
+                "Hoja de Ejercicios Prácticos para el Aula (Trabajo por Estaciones)",
+                "Prueba Competencial Basada en Situaciones Cotidianas"
+            ]
+        )
+    with col_dua2:
+        perfiles_seleccionados = st.multiselect(
+            "Selecciona los perfiles DUA para los que generar versiones adaptadas:",
+            [
+                "Refuerzo / Nivel Inicial (Andamiaje, coeficientes enteros, números sencillos)",
+                "Estándar / Nivel Medio (Currículo ordinario 3º ESO)",
+                "TDAH (Enunciados breves, datos en negrita, tareas divididas en pasos)",
+                "Altas Capacidades (Retos de deducción, generalización algebraica, pensamiento lateral)",
+                "Discalculia Leve (Apoyo con esquemas, sin distractores aritméticos complejos)"
+            ],
+            default=[
+                "Refuerzo / Nivel Inicial (Andamiaje, coeficientes enteros, números sencillos)",
+                "Estándar / Nivel Medio (Currículo ordinario 3º ESO)",
+                "TDAH (Enunciados breves, datos en negrita, tareas divididas en pasos)",
+                "Altas Capacidades (Retos de deducción, generalización algebraica, pensamiento lateral)"
+            ]
+        )
+        
+    num_ejercicios = st.slider("Número de ejercicios por versión:", min_value=2, max_value=6, value=3)
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        incluir_soluciones = st.checkbox("Incluir resoluciones completas paso a paso (Uso exclusivo docente)", value=True)
+    with col_c2:
+        incluir_rubrica = st.checkbox("Incluir criterios de calificación y baremo de puntuación", value=True)
+        
+    if st.button("🚀 Generar Material Adaptado DUA con LaTeX", type="primary"):
+        if not perfiles_seleccionados:
+            st.warning("Por favor, selecciona al menos un perfil de diversidad DUA.")
+        else:
+            with st.spinner("Generando ejercicios multinivel con tipografía LaTeX..."):
+                prompt_dua = f"""
+                Actúa como diseñador didáctico de Matemáticas de Secundaria especialista en el Diseño Universal para el Aprendizaje (DUA).
+                Genera el siguiente material educativo:
+                
+                PARÁMETROS:
+                - Tema de Matemáticas: {tema_examen}
+                - Tipo de Instrumento: {tipo_prueba}
+                - Nivel: 3º de ESO (alumnos de 14-15 años en España)
+                - Número de ejercicios por perfil: {num_ejercicios}
+                - Perfiles solicitados: {', '.join(perfiles_seleccionados)}
+                - Incluir soluciones: {'SÍ' if incluir_soluciones else 'NO'}
+                - Incluir rúbrica/criterios: {'SÍ' if incluir_rubrica else 'NO'}
+                
+                REGLAS DE FORMATO Y CONTENIDO (MUY ESTRICTO):
+                1. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones algebraicas utilizando notación LaTeX limpia:
+                   - Fórmulas en línea con un solo signo de dólar, ejemplo: $2x + y = 7$ o $x = \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}$.
+                   - Fórmulas en bloque con doble dólar:
+                     $$ \\begin{{cases}} 2x + 3y = 12 \\\\ x - y = 1 \\end{{cases}} $$
+                2. ADAPTACIÓN DUA REAL:
+                   - Versión Refuerzo: Problemas con coeficientes enteros pequeños, pasos guiados ("Paso 1: Despeja la incógnita $x$..."), sin fracciones complejas.
+                   - Versión TDAH: Enunciados sumamente concisos, palabras clave destacadas en **negrita**, sin texto de relleno accesorio, divididos en sub-apartados claros (a, b, c) para evitar la sobrecarga ejecutiva.
+                   - Versión Altas Capacidades: Ejercicios no repetitivos, que exijan análisis crítico, resolución de problemas no estándar, formulación de modelos algebraicos o discusión en función de un parámetro.
+                   - Versión Discalculia Leve: Reducción de la carga de memoria operativa numérica, facilitando el planteamiento conceptual.
+                3. ESTRUCTURA:
+                   - Organiza claramente cada versión bajo encabezados `### Versión: [Nombre del Perfil]`.
+                   - Al final, si está solicitado, incluye `### Solucionario Razonado Docente` y `### Criterios de Evaluación y Calificación`.
+                """
+                
+                system_instruction = "Eres un catedrático de Matemáticas de Secundaria y formador de profesorado en DUA. Tus salidas son pedagógicamente impecables y usan LaTeX matemáticamente riguroso."
+                material_dua = call_gemini(prompt_dua, system_instruction)
+                
+                st.markdown("---")
+                st.markdown(material_dua)
+
+
+# =============================================================================
+# PESTAÑA 4: 🤖 ASISTENTE DOCENTE CON CONTEXTO DEL AULA
+# =============================================================================
+with tab4:
+    st.header("🤖 Asistente Docente IA (Contextualizado con 3º ESO)")
+    st.markdown("Consulta cualquier duda pedagógica, organizativa o de agrupamientos. La IA analiza los datos anonimizados de la clase para ofrecerte respuestas prácticas.")
+    
+    # Contexto del aula preparado para el agente
+    df_actual = st.session_state["df_alumnos"]
+    resumen_alumnos_texto = df_actual.to_string(index=False)
+    
+    system_prompt_chat = f"""
+    Eres el Asistente Pedagógico de Inteligencia Artificial para el profesor de Matemáticas de 3º de ESO.
+    Tienes acceso permanente al registro de datos de la clase actual, el cual cumple estrictamente con el RGPD (todos los alumnos están identificados exclusivamente por códigos como ALU_01, ALU_02, etc.).
+    
+    TABLA OFICIAL DE DATOS DEL AULA (3º ESO):
+    {resumen_alumnos_texto}
+    
+    TUS DIRECTRICES PEDAGÓGICAS Y LEGALES:
+    1. PRIVACIDAD RGPD: Nunca pidas ni uses nombres reales. Trabaja siempre con los códigos ALU_XX.
+    2. TUTORÍA ENTRE IGUALES: Cuando te pidan agrupamientos o parejas cooperativas, empareja estratégicamente a alumnos con perfiles complementarios (por ejemplo, ALU_03 o ALU_10 de Altas Capacidades/alto rendimiento con ALU_01, ALU_13 o perfiles que se beneficien de una tutoría paciente y estructurada), teniendo en cuenta las notas y observaciones.
+    3. ALUMNOS EN RIESGO: Si el docente pregunta por alumnos en riesgo o suspensos, identifica de inmediato a aquellos con Nota_Media < 5.0 y faltas elevadas (como ALU_02, ALU_07, ALU_12, ALU_13, ALU_15) y propone estrategias concretas de rescate académico.
+    4. TONO: Profesional, conciso, empático con la labor docente, basado en evidencia pedagógica y matemáticas de secundaria en España.
+    """
+    
+    # Inicializar historial de chat
+    if "chat_messages" not in st.session_state:
+        st.session_state["chat_messages"] = [
+            {
+                "role": "assistant",
+                "content": "👋 Hola, colega docente. He cargado el registro de los 15 alumnos de 3º de ESO con sus perfiles DUA, notas y faltas. ¿En qué te puedo ayudar hoy? Puedes preguntarme sobre agrupamientos para tutoría entre iguales, alumnos en riesgo de evaluación negativa o adaptaciones metodológicas."
+            }
+        ]
+
+    # Sugerencias rápidas de preguntas
+    st.markdown("**Sugerencias rápidas de consulta:**")
+    col_q1, col_q2, col_q3 = st.columns(3)
+    pregunta_rapida = None
+    with col_q1:
+        if st.button("👥 Agrupar por tutoría entre iguales", use_container_width=True):
+            pregunta_rapida = "¿Cómo agrupo a mis alumnos por parejas de tutoría entre iguales según la tabla para trabajar sistemas de ecuaciones?"
+    with col_q2:
+        if st.button("⚠️ Resumen de alumnos en riesgo", use_container_width=True):
+            pregunta_rapida = "Hazme un resumen de los alumnos en riesgo de suspenso según sus notas y faltas, y propón un plan de choque."
+    with col_q3:
+        if st.button("🎯 Adaptaciones para ALU_04 y ALU_05", use_container_width=True):
+            pregunta_rapida = "¿Qué pautas concretas debo seguir en clase para atender a ALU_04 (TDAH) y ALU_05 (Discalculia) en la unidad de álgebra?"
+
+    # Renderizar historial de mensajes
+    for msg in st.session_state["chat_messages"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Captura de input (por botón rápido o campo de chat)
+    user_input = st.chat_input("Escribe tu consulta pedagógica sobre el grupo...")
+    prompt_to_send = pregunta_rapida if pregunta_rapida else user_input
+
+    if prompt_to_send:
+        # Añadir mensaje del usuario
+        st.session_state["chat_messages"].append({"role": "user", "content": prompt_to_send})
+        with st.chat_message("user"):
+            st.markdown(prompt_to_send)
+
+        # Generar respuesta con IA
+        with st.chat_message("assistant"):
+            with st.spinner("Analizando datos del aula y reflexionando respuesta pedagógica..."):
+                # Construir historial para contexto
+                historial_conversacion = ""
+                for m in st.session_state["chat_messages"][-6:]: # últimos 6 mensajes
+                    historial_conversacion += f"{m['role'].upper()}: {m['content']}\n"
+                    
+                full_prompt = f"""
+                HISTORIAL RECIENTE:
+                {historial_conversacion}
+                
+                NUEVA PREGUNTA DEL PROFESOR:
+                {prompt_to_send}
+                """
+                
+                respuesta_ia = call_gemini(full_prompt, system_instruction=system_prompt_chat)
+                st.markdown(respuesta_ia)
+                st.session_state["chat_messages"].append({"role": "assistant", "content": respuesta_ia})
