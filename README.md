@@ -14,6 +14,7 @@ La protección del menor y de los datos académicos sensibles en el entorno educ
 2. **Cero Exposición de Datos Personales (PII) a Modelos de Lenguaje:**
    - Al interactuar con la API de Google Gemini (`google-genai`), los prompts y contextos contienen exclusivamente códigos alfanuméricos y observaciones pedagógicas objetivas.
    - Las empresas proveedoras de IA nunca reciben datos de carácter personal que permitan identificar o reidentificar a un estudiante.
+   - **Detección Dinámica de Modelos:** La aplicación consulta dinámicamente `client.models.list()` para seleccionar de forma automática un modelo *Flash* vigente y compatible con `generateContent` (ej. `gemini-2.5-flash`), evitando errores 404 por modelos descatalogados.
 3. **Custodia de la Matriz de Reidentificación:**
    - La correspondencia entre el código anónimo (`ALU_02`) y la identidad del estudiante permanece exclusivamente en el cuaderno de calificaciones oficial del docente o en los sistemas de gestión académica institucional del centro (e.g., Séneca, Raíces, Ítaca), desconectada por completo de esta herramienta en la nube.
 4. **Borradores Administrativos Seguros:**
