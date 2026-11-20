@@ -107,7 +107,7 @@ check_authentication()
 
 
 # -----------------------------------------------------------------------------
-# 3. CLIENTE GEMINI Y GESTIÓN DE SECRETS
+# 3. CLIENTE GEMINI Y SELECCIÓN DINÁMICA DE MODELOS (MODELS.LIST)
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def get_gemini_client():
@@ -126,12 +126,79 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
+@st.cache_data(ttl=1800)
+def discover_gemini_models(_api_key: str) -> list[str]:
+    """
+    Consulta dinámicamente los modelos disponibles en la API del usuario mediante models.list()
+    y selecciona automáticamente modelos Flash vigentes que soporten generateContent.
+    Esto previene errores 404 por modelos descatalogados.
+    """
+    try:
+        temp_client = genai.Client(api_key=_api_key)
+        all_models = list(temp_client.models.list())
+        
+        flash_candidates = []
+        other_candidates = []
+        
+        for m in all_models:
+            name = getattr(m, "name", "") or ""
+            clean_name = name.replace("models/", "")
+            
+            # Verificar si soporta generación de contenido
+            actions = getattr(m, "supported_actions", None) or getattr(m, "supported_generation_methods", None)
+            supports_generate = True
+            if actions:
+                supports_generate = any("generateContent" in str(act) for act in actions)
+                
+            if supports_generate:
+                if "flash" in clean_name.lower():
+                    flash_candidates.append(clean_name)
+                elif "gemini" in clean_name.lower() and "pro" in clean_name.lower():
+                    other_candidates.append(clean_name)
+                    
+        # Orden de preferencia para modelos Flash vigentes
+        preference_order = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-001",
+            "gemini-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash-lite"
+        ]
+        
+        sorted_flash = []
+        for pref in preference_order:
+            for cand in flash_candidates:
+                if (cand == pref or cand.startswith(pref)) and cand not in sorted_flash:
+                    sorted_flash.append(cand)
+                    
+        # Añadir cualquier otro modelo flash encontrado
+        for cand in flash_candidates:
+            if cand not in sorted_flash:
+                sorted_flash.append(cand)
+                
+        if sorted_flash:
+            return sorted_flash
+        if other_candidates:
+            return other_candidates
+            
+    except Exception:
+        # Fallback de respaldo si models.list() no estuviese disponible
+        pass
+        
+    return ["gemini-2.5-flash", "gemini-2.0-flash"]
+
 def call_gemini(prompt: str, system_instruction: str = None) -> str:
-    """Ejecuta una petición al modelo Gemini Flash con reintento/fallback seguro."""
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    """Ejecuta una petición usando el modelo Flash óptimo detectado en la API."""
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        
+    candidate_models = discover_gemini_models(api_key)
     last_error = None
     
-    for model_name in models_to_try:
+    for model_name in candidate_models:
         try:
             config = types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -207,10 +274,20 @@ init_student_data()
 # 5. BARRA LATERAL (SIDEBAR) DOCENTE
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.image("https://api.iconify.design/lucide:graduation-cap.svg?color=%231e40af", width=48)
+    st.markdown("<div style='font-size: 3.4rem; line-height: 1.1; margin-bottom: 0.2rem;'>📐</div>", unsafe_allow_html=True)
     st.title("TutorMates 3º ESO")
     st.markdown("**Cuaderno Digital de Matemáticas**")
     st.caption("Adaptado al marco DUA y normativa RGPD")
+    
+    # Modelo IA detectado dinámicamente
+    try:
+        _api_key_sidebar = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        _api_key_sidebar = os.environ.get("GEMINI_API_KEY", "")
+        
+    _modelos_detectados = discover_gemini_models(_api_key_sidebar)
+    _modelo_mostrado = _modelos_detectados[0] if _modelos_detectados else "gemini-2.5-flash"
+    st.caption(f"⚡ **Modelo IA activo:** `{_modelo_mostrado}`")
     
     st.divider()
     
