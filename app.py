@@ -713,9 +713,10 @@ with tab2:
     st.header("📅 Planificación Curricular y Gestión de Aula")
     st.markdown("Herramientas para la secuenciación de unidades didácticas y resolución inmediata de sustituciones o guardias de aula.")
     
-    subtab_temario, subtab_guardia = st.tabs([
+    subtab_temario, subtab_guardia, subtab_reto = st.tabs([
         "📅 Distribución de Horas y Temario",
-        "🚨 Modo Guardia Express"
+        "🚨 Modo Guardia Express",
+        "🏆 Reto Matemático Semanal (Gamificación)"
     ])
     
     # -------------------------------------------------------------------------
@@ -886,6 +887,146 @@ with tab2:
                 )
             except Exception as e:
                 st.error(f"Error al exportar ficha a Word: {str(e)}")
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 3: 🏆 RETO MATEMÁTICO SEMANAL (GAMIFICACIÓN)
+    # -------------------------------------------------------------------------
+    with subtab_reto:
+        st.subheader("🏆 Reto Matemático Semanal / Escape Room de Aula")
+        st.caption("Fomenta la motivación, el pensamiento lateral y el estímulo para Altas Capacidades mediante desafíos lúdicos con pistas escalonadas y narrativa envolvente.")
+
+        with st.form("form_reto_semanal"):
+            col_r1, col_r2 = st.columns([2, 1])
+            with col_r1:
+                tema_reto = st.text_input(
+                    "Contenido o bloque matemático:",
+                    value="Ecuaciones, acertijos algebraicos y lógica proporcional",
+                    key="input_tema_reto"
+                )
+            with col_r2:
+                narrativa_reto = st.selectbox(
+                    "Ambientación / Formato del reto:",
+                    [
+                        "🕵️ Misterio detectivesco (Descifrar código o clave secreta)",
+                        "🔐 Escape Room de aula (3 candados o cerraduras matemáticas)",
+                        "🚀 Misión espacial / Misión científica contrarreloj",
+                        "🏛️ Acertijo histórico / Paradoja matemática clásica",
+                        "🍕 Dilema cotidiano / Reto de economía doméstica y lógica"
+                    ],
+                    key="sel_narrativa_reto"
+                )
+
+            col_rn1, col_rn2 = st.columns([1, 1])
+            with col_rn1:
+                dificultad_reto = st.selectbox(
+                    "Nivel de desafío pedagógico:",
+                    [
+                        "Inclusivo multinivel (Accesible con ingenio, engancha a todo el grupo)",
+                        "Estándar 3º ESO (Currículo ordinario con giro de pensamiento lateral)",
+                        "Reto de profundización / Altas Capacidades (Deducción abstracta y generalización)"
+                    ],
+                    key="sel_dificultad_reto"
+                )
+            with col_rn2:
+                modalidad_reto = st.selectbox(
+                    "Dinámica de aplicación en el aula:",
+                    [
+                        "Póster semanal en corcho (Respuestas en buzón físico hasta el viernes)",
+                        "Actividad cooperativa de inicio o cierre de sesión (15-20 min)",
+                        "Mini Escape Room por equipos (Competición con compra de pistas)"
+                    ],
+                    key="sel_modalidad_reto"
+                )
+
+            col_rc1, col_rc2 = st.columns(2)
+            with col_rc1:
+                incluir_pistas = st.checkbox("Incluir 3 pistas escalonadas (Sistema de sobres o desbloqueo gradual)", value=True, key="chk_pistas_reto")
+            with col_rc2:
+                incluir_solucionario = st.checkbox("Incluir solucionario docente detallado y variantes de ampliación", value=True, key="chk_sol_reto")
+
+            btn_generar_reto = st.form_submit_button("✨ Generar Reto Gamificado Completo", type="primary")
+
+        if btn_generar_reto:
+            with st.spinner("Diseñando reto matemático, narrativa y sistema de pistas..."):
+                prompt_reto = f"""
+                Actúa como un profesor de Matemáticas de Secundaria especialista en Gamificación Educativa, Aprendizaje Basado en Juegos (ABJ) y atención a la diversidad (DUA) en España.
+                Diseña un RETO MATEMÁTICO SEMANAL / ESCAPE ROOM MOTIVADOR para alumnos de 3º de ESO (14-15 años).
+
+                PARÁMETROS DEL RETO:
+                - Contenido Matemático: {tema_reto}
+                - Ambientación Narrativa: {narrativa_reto}
+                - Nivel de Dificultad: {dificultad_reto}
+                - Dinámica de Aula: {modalidad_reto}
+                - Incluir 3 Pistas Graduadas: {'SÍ' if incluir_pistas else 'NO'}
+                - Incluir Solucionario Docente: {'SÍ' if incluir_solucionario else 'NO'}
+
+                REGLAS DE FORMATO Y CONTENIDO (RIGUROSAS):
+                1. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones utilizando LaTeX limpio ($...$ en línea y $$...$$ en bloque).
+                2. NARRATIVA ENVOLVENTE: El problema no debe ser una cuenta aburrida, sino un misterio o reto donde las matemáticas sean la herramienta esencial para resolverlo.
+                3. ENFOQUE DUA E INCLUSIVO: La premisa debe ser atractiva y fácil de comprender, pero con profundidad suficiente para premiar la perseverancia y el razonamiento deductivo.
+
+                ESTRUCTURA OBLIGATORIA EN MARKDOWN:
+
+                # 🏆 RETO MATEMÁTICO DE LA SEMANA: [TÍTULO IMPACTANTE]
+
+                ## 📜 1. La Misión / Enigma (Cartel para el Alumnado)
+                - **Contexto Narrativo:** Breve introducción inmersiva (3-4 líneas).
+                - **El Desafío:** Planteamiento visual y matemático claro del problema con fórmulas en LaTeX.
+                - **La Pregunta Final:** Qué deben entregar exactamente (ej. un código de 3 cifras, el valor de una incógnita oculta o la justificación lógica).
+
+                ## 💡 2. Sistema de Pistas Escalonadas (Para desbloquear si hay bloqueo)
+                *(Diseñadas para entregar en sobres o previa consulta)*
+                - **Pista 1 (Activación / Enfoque inicial):** Una pista sutil para orientar por dónde empezar a organizar los datos sin desvelar cuentas.
+                - **Pista 2 (Andamiaje matemático):** Una pista intermedia que muestra la relación o ecuación clave.
+                - **Pista 3 (Empujón final):** Casi la resolución, para evitar la frustración de alumnos con dificultades.
+
+                ## 🔑 3. Guía Docente y Solucionario Razonado (Uso Exclusivo del Profesor)
+                - **Solución Matemática Completa:** Resolución algebraica o numérica paso a paso con LaTeX.
+                - **Errores Típicos Anticipados:** Qué fallos comunes de razonamiento cometerán los alumnos y cómo guiarlos con preguntas socráticas.
+                - **Ampliación para Altas Capacidades:** Una pregunta o variante adicional para los alumnos que lo resuelvan muy rápido.
+
+                ## 🎮 4. Reglas del Juego y Dinámica de Puntuación Sugerida
+                - Puntuación recomendada (ej: 100 pts sin pistas, 75 pts con Pista 1, 50 pts con Pista 2...).
+                - Cómo gestionarlo en el aula (buzón físico, corcho o plataforma virtual).
+                """
+
+                system_instruction_reto = "Eres un formador de docentes en innovación educativa y gamificación matemática para Educación Secundaria en España. Generas actividades rigurosas en contenido matemático pero sumamente atractivas y lúdicas."
+                reto_generado = call_gemini(prompt_reto, system_instruction_reto)
+                st.session_state["ultimo_reto_gamificacion"] = reto_generado
+                st.session_state["ultimo_tema_reto"] = tema_reto
+
+        if st.session_state.get("ultimo_reto_gamificacion"):
+            st.markdown("---")
+            st.markdown("### 📄 Reto Gamificado Generado")
+            st.markdown(st.session_state["ultimo_reto_gamificacion"])
+
+            col_exp_r1, col_exp_r2 = st.columns([1, 1])
+            with col_exp_r1:
+                try:
+                    docx_reto_file = create_docx_from_markdown(
+                        st.session_state["ultimo_reto_gamificacion"],
+                        title=f"Reto Semanal - {st.session_state.get('ultimo_tema_reto', 'Matemáticas')}",
+                        curso="3º ESO"
+                    )
+                    st.download_button(
+                        label="⬇️ Descargar Cartel y Ficha en Word (.docx)",
+                        data=docx_reto_file,
+                        file_name=f"reto_semanal_{st.session_state.get('ultimo_tema_reto', 'mates').lower().replace(' ', '_')[:25]}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key="btn_descarga_docx_reto"
+                    )
+                except Exception as e:
+                    st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
+            with col_exp_r2:
+                st.download_button(
+                    label="⬇️ Descargar Reto en Texto (.txt)",
+                    data=st.session_state["ultimo_reto_gamificacion"],
+                    file_name=f"reto_semanal_{st.session_state.get('ultimo_tema_reto', 'mates').lower().replace(' ', '_')[:25]}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="btn_descarga_txt_reto"
+                )
 
 
 # =============================================================================
