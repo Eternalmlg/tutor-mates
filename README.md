@@ -1,6 +1,6 @@
 # 📐 TutorMates DUA — Cuaderno Privado de Gestión Docente de Matemáticas (3º ESO)
 
-Aplicación web privada diseñada exclusivamente para **profesores de Matemáticas de Educación Secundaria**, concebida para automatizar la burocracia administrativa, planificar secuenciaciones de aula realistas y generar material adaptado al **Diseño Universal para el Aprendizaje (DUA)**, garantizando un cumplimiento riguroso del **Reglamento General de Protección de Datos (RGPD)**.
+Aplicación web privada diseñada exclusivamente para **profesores de Matemáticas de Educación Secundaria**, concebida para automatizar la burocracia administrativa, planificar secuenciaciones de aula realistas, gestionar sustituciones imprevistas y generar material adaptado al **Diseño Universal para el Aprendizaje (DUA)**, garantizando un cumplimiento riguroso del **Reglamento General de Protección de Datos (RGPD)**.
 
 ---
 
@@ -35,38 +35,64 @@ Para evitar de manera estricta que el alumnado o terceros ajenos al equipo docen
 
 ## 🚀 3. Funcionalidades de Automatización Docente
 
-La aplicación organiza el trabajo en 4 pestañas especializadas:
+La aplicación organiza el trabajo en 5 pestañas profesionales:
 
 ### 📋 Pestaña 1: Pasar Lista y Burocracia
-- **Pase de Lista Interactivo:** Tabla editable (`st.data_editor`) donde el profesor puede marcar asistencia diaria, registrar faltas acumuladas y actualizar notas u observaciones.
-- **Detección Automática de Absentismo:** Alerta visual y automática cuando un alumno supera las **4 faltas acumuladas**, activando el protocolo de riesgo escolar.
+- **Mini-Dashboard Estadístico del Aula:**
+  - Tres tarjetas métricas dinámicas (`st.metric`):
+    - *Nota Media del Grupo:* Cálculo instantáneo del rendimiento global del aula.
+    - *% Alumnos en Riesgo:* Porcentaje y conteo exacto de estudiantes con Nota Media < 5.0 o más de 4 faltas acumuladas.
+    - *Total Faltas Acumuladas:* Sumatorio de ausencias con media por alumno.
+- **Analítica Visual Nativa de Aula:**
+  - *Gráfico de Dispersión (Scatter Chart):* Correlación directa entre Faltas Acumuladas y Nota Media clasificada por Perfil DUA.
+  - *Gráfico de Barras (Bar Chart):* Desglose de faltas individuales por código `ALU_XX` frente al umbral crítico de absentismo (>4 faltas).
+- **Pase de Lista Interactivo:** Tabla editable (`st.data_editor`) para marcar la asistencia de hoy, ajustar faltas y redactar observaciones pedagógicas.
 - **Exportación en CSV:** Botón para descargar el registro actualizado de la sesión con un solo clic.
-- **Redacción Automatizada de Partes Oficiales:** Generación inmediata con IA de:
-  - Partes oficiales para **Jefatura de Estudios / Comisión de Absentismo**.
-  - Correos formales de citación para **Familias y Tutores Legales**, fundamentados en la normativa de evaluación continua y orientación de ESO.
+- **Redacción Automatizada de Partes Oficiales con IA:**
+  - Generación de partes para **Jefatura de Estudios / Comisión de Absentismo**.
+  - Citaciones formales para **Familias y Tutores Legales**, cumpliendo con la normativa de absentismo de ESO.
 
-### 📅 Pestaña 2: Distribución de Horas y Temario
-- **Cálculo de Sesiones Netas:** Descuenta de forma automática festivos, jornadas de huelga o salidas escolares del total de sesiones disponibles antes del examen.
-- **Secuenciación Didáctica Realista (Sesión por Sesión):**
-  - Estructuración de cada clase de 50 minutos: activación inicial (10 min), trabajo guiado/autónomo (30 min) y ticket de salida/cierre (10 min).
-  - Medida específica DUA incorporada en cada sesión lectiva.
-  - Inclusión obligatoria de sesiones de **dudas, simulacro cooperativo, examen formal y coevaluación/feedback post-examen**.
+### 📅 Pestaña 2: Planificación de Aula
+Organizada en dos sub-pestañas:
+- **Sub-pestaña '📅 Distribución de Horas y Temario':**
+  - Cálculo automático de sesiones netas descontando festivos y días no lectivos.
+  - Secuenciación didáctica sesión por sesión (estructura 10-30-10 min) con adaptaciones DUA.
+  - Inclusión obligatoria de sesiones de dudas, simulacro cooperativo, examen y retroalimentación post-evaluación.
+- **Sub-pestaña '🚨 Modo Guardia Express':**
+  - Generador de fichas de guardia autocontenidas de **50 minutos** listas para usar ante una sustitución imprevista.
+  - Incluye:
+    1. Instrucciones organizativas rápidas para el profesor/a de guardia (5 min).
+    2. Actividad de activación o calentamiento en pizarra (5-10 min).
+    3. Cuatro ejercicios graduados en dificultad (básico, comprensión, problema aplicado y reto).
+    4. **Hoja de soluciones explicadas paso a paso en lenguaje accesible**, redactada específicamente para que un docente de cualquier otra especialidad (Historia, Inglés, Educación Física, etc.) pueda escribir y corregir los ejercicios en la pizarra con total tranquilidad.
+  - **Descarga real en Word (`.docx`):** Exportación con cabecera formal institucional.
 
 ### 🎯 Pestaña 3: Diseñador de Ejercicios y Exámenes DUA
-- **Atención a la Diversidad Multinivel:** Genera simultáneamente actividades adaptadas a los perfiles seleccionados:
+- **Atención a la Diversidad Multinivel:** Generación simultánea de versiones adaptadas para:
   - *Refuerzo / Nivel Inicial:* Andamiaje paso a paso y coeficientes sencillos.
   - *Estándar / Nivel Medio:* Competencias curriculares de 3º de ESO.
   - *TDAH:* Enunciados concisos, palabras clave en negrita y división en pasos breves sin sobrecarga cognitiva.
-  - *Altas Capacidades:* Retos de pensamiento lateral, formulación algebraica de conjeturas y problemas no rutinarios.
+  - *Altas Capacidades:* Retos deductivos, pensamiento lateral y generalización algebraica.
   - *Discalculia Leve:* Apoyo visual estructurado sin distractores aritméticos complejos.
-- **Tipografía Matemática LaTeX:** Fórmulas limpias y profesionales renderizadas con `$ ... $` y `$$ ... $$`.
-- **Solucionarios y Rúbricas:** Resoluciones completas paso a paso y criterios de calificación para el profesorado.
+- **Tipografía Matemática LaTeX:** Fórmulas limpias renderizadas con `$ ... $` y `$$ ... $$`.
+- **Exportación a Microsoft Word (`.docx`) con Cabecera Formal:**
+  - Conversión automática de Markdown a `.docx` nativo en memoria (`io.BytesIO`).
+  - Cabecera oficial: *Departamento de Matemáticas*, Curso, Fecha, Grupo y espacio para *Nombre del alumno/a* y *Calificación*.
+  - Persistencia en `st.session_state` para evitar que el contenido desaparezca al pulsar el botón de descarga.
 
 ### 🤖 Pestaña 4: Asistente Docente con Contexto del Aula
-- **Chatbot Pedagógico Contextualizado:** El agente tiene acceso en tiempo real a los 15 perfiles anónimos de `clase_3eso.csv`.
-- **Tutoría entre Iguales:** Capacidad para recomendar agrupamientos óptimos y parejas cooperativas complementando perfiles fuertes (ej. Altas Capacidades) con perfiles que requieran andamiaje.
-- **Detección de Riesgo Académico:** Identifica alumnos en umbral de suspenso y propone planes de choque individualizados.
-- **Atajos de Consulta Rápida:** Botones preconfigurados para resolver consultas organizativas frecuentes.
+- **Chatbot Pedagógico Contextualizado:** Acceso en tiempo real al dataset completo de los 15 alumnos anónimos.
+- **Tutoría entre Iguales:** Recomendaciones de agrupamientos cooperativos complementando perfiles fuertes (Altas Capacidades) con alumnos que necesitan apoyo.
+- **Detección de Riesgo Académico:** Identificación de alumnos en riesgo de evaluación negativa y planes de rescate.
+- **Botones de Consulta Rápida:** Atajos para resolver dudas frecuentes sobre agrupamientos o adaptaciones.
+
+### 📜 Pestaña 5: Normativa y Plan de Convivencia
+- **Asistente Oficial Basado en Evidencia Documental:**
+  - Precarga automática de archivos PDF depositados en la carpeta `documentos_centro/` mediante `pypdf`.
+  - Resumen visual de documentos y páginas indexadas en memoria con `@st.cache_data`.
+  - Posibilidad de subir un documento PDF complementario temporal para consultas específicas.
+  - **Citación Obligatoria de Fuente y Página:** Cada respuesta de la IA referencia explícitamente el nombre del documento y el número de página (`[Nombre.pdf, pág. X]`).
+  - Respuestas taxativas basadas únicamente en la normativa interna (si un procedimiento no consta en el texto, el asistente informa de ello sin inventar).
 
 ---
 
@@ -74,10 +100,11 @@ La aplicación organiza el trabajo en 4 pestañas especializadas:
 
 ```plaintext
 tutor-mates/
-├── .gitignore             # Exclusión de archivos sensibles y temporales
+├── .gitignore             # Exclusión de credenciales y temporales
 ├── README.md              # Documentación técnica, pedagógica y legal
-├── requirements.txt       # Dependencias necesarias para Streamlit Cloud
-├── clase_3eso.csv         # Dataset simulado con 15 alumnos anonimizados (DUA)
+├── requirements.txt       # Dependencias del proyecto (streamlit, google-genai, pandas, pypdf, python-docx)
+├── clase_3eso.csv         # Registro anonimizado de 15 alumnos (DUA)
+├── documentos_centro/     # Carpeta para depositar los reglamentos y planes de convivencia (PDF)
 └── app.py                 # Aplicación principal de Streamlit
 ```
 
@@ -87,9 +114,9 @@ tutor-mates/
 
 Para desplegar esta herramienta privada en tu cuenta de **Streamlit Cloud**:
 
-1. Sube estos archivos a un repositorio privado de **GitHub**.
+1. Sube estos archivos a tu repositorio en **GitHub**.
 2. Entra en [share.streamlit.io](https://share.streamlit.io/) y selecciona tu repositorio.
-3. En la sección **Advanced settings > Secrets**, añade las siguientes dos variables:
+3. En la sección **App Settings > Secrets**, añade las siguientes variables:
 
 ```toml
 TEACHER_PASSWORD = "TuClaveSecretaDocente2026"

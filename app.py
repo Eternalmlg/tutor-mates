@@ -5,6 +5,8 @@ Cumplimiento estricto del RGPD (Datos Anónimos)
 """
 
 import os
+import io
+import re
 import streamlit as st
 import pandas as pd
 from google import genai
@@ -14,6 +16,127 @@ try:
     from pypdf import PdfReader
 except ImportError:
     PdfReader = None
+
+try:
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+except ImportError:
+    Document = None
+
+def _add_formatted_text(paragraph, text: str):
+    """Procesa negritas (**texto**) y texto regular para párrafos de python-docx."""
+    clean_text = text.replace("$$", "").strip()
+    parts = re.split(r"(\*\*.*?\*\*)", clean_text)
+    for part in parts:
+        if part.startswith("**") and part.endswith("**") and len(part) >= 4:
+            run = paragraph.add_run(part[2:-2])
+            run.bold = True
+        else:
+            paragraph.add_run(part)
+
+def create_docx_from_markdown(markdown_text: str, title: str = "Prueba de Evaluación / Actividad de Aula", curso: str = "3º ESO") -> io.BytesIO:
+    """Convierte texto en formato Markdown a un documento Word (.docx) formal con cabecera de centro educativo."""
+    if Document is None:
+        raise ImportError("La librería python-docx no está disponible. Asegúrate de incluirla en requirements.txt.")
+    
+    doc = Document()
+    
+    # Configurar márgenes de página (aprox 2 cm)
+    for section in doc.sections:
+        section.top_margin = Inches(0.8)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
+        
+    # Cabecera formal de centro educativo
+    header_table = doc.add_table(rows=2, cols=2)
+    header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    header_table.autofit = False
+    
+    # Celda 0,0: Departamento y Título
+    cell_top_left = header_table.cell(0, 0)
+    p_dep = cell_top_left.paragraphs[0]
+    p_dep.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r_dep = p_dep.add_run("DEPARTAMENTO DE MATEMÁTICAS\n")
+    r_dep.bold = True
+    r_dep.font.size = Pt(11)
+    r_dep.font.color.rgb = RGBColor(30, 64, 175)
+    
+    r_title = p_dep.add_run(f"{title.upper()}\n")
+    r_title.bold = True
+    r_title.font.size = Pt(12)
+    
+    # Celda 0,1: Curso y Metadatos
+    cell_top_right = header_table.cell(0, 1)
+    p_meta = cell_top_right.paragraphs[0]
+    p_meta.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    r_curso = p_meta.add_run(f"Curso: {curso}\nFecha: _______________\nGrupo: _________")
+    r_curso.font.size = Pt(10)
+    r_curso.font.color.rgb = RGBColor(71, 85, 105)
+    
+    # Fila 1 combinada: Datos del Alumno/a
+    cell_bottom = header_table.cell(1, 0)
+    cell_bottom.merge(header_table.cell(1, 1))
+    p_alum = cell_bottom.paragraphs[0]
+    p_alum.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r_alum = p_alum.add_run("Nombre y Apellidos del alumno/a: ____________________________________________________  Calificación: ______")
+    r_alum.font.size = Pt(10)
+    r_alum.bold = True
+    
+    # Línea separadora
+    p_line = doc.add_paragraph()
+    p_line.paragraph_format.space_before = Pt(6)
+    p_line.paragraph_format.space_after = Pt(10)
+    r_line = p_line.add_run("—" * 60)
+    r_line.font.color.rgb = RGBColor(148, 163, 184)
+    
+    # Parsear y renderizar Markdown
+    lines = markdown_text.split("\n")
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+            
+        if stripped.startswith("### "):
+            h = doc.add_heading(level=3)
+            _add_formatted_text(h, stripped[4:])
+            h.paragraph_format.space_before = Pt(10)
+            h.paragraph_format.space_after = Pt(4)
+        elif stripped.startswith("## "):
+            h = doc.add_heading(level=2)
+            _add_formatted_text(h, stripped[3:])
+            h.paragraph_format.space_before = Pt(14)
+            h.paragraph_format.space_after = Pt(6)
+        elif stripped.startswith("# "):
+            h = doc.add_heading(level=1)
+            _add_formatted_text(h, stripped[2:])
+            h.paragraph_format.space_before = Pt(16)
+            h.paragraph_format.space_after = Pt(6)
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            p = doc.add_paragraph(style='List Bullet')
+            _add_formatted_text(p, stripped[2:])
+            p.paragraph_format.space_after = Pt(3)
+        elif re.match(r"^\d+\.\s+", stripped):
+            p = doc.add_paragraph(style='List Number')
+            content = re.sub(r"^\d+\.\s+", "", stripped)
+            _add_formatted_text(p, content)
+            p.paragraph_format.space_after = Pt(3)
+        elif stripped.startswith("---") or stripped.startswith("***"):
+            p = doc.add_paragraph()
+            r = p.add_run("—" * 50)
+            r.font.color.rgb = RGBColor(203, 213, 225)
+            p.paragraph_format.space_after = Pt(6)
+        else:
+            p = doc.add_paragraph()
+            _add_formatted_text(p, stripped)
+            p.paragraph_format.space_after = Pt(6)
+            
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN DE PÁGINA
@@ -326,7 +449,7 @@ st.markdown("Herramienta docente privada para automatizar la gestión de aula, d
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📋 Pasar Lista y Burocracia",
-    "📅 Distribución de Horas y Temario",
+    "📅 Planificación de Aula",
     "🎯 Diseñador de Ejercicios y Exámenes DUA",
     "🤖 Asistente Docente con Contexto del Aula",
     "📜 Normativa y Plan de Convivencia"
@@ -349,6 +472,62 @@ with tab1:
     else:
         st.success("✅ No hay ningún alumno que supere el umbral de alerta de absentismo (>4 faltas).")
     
+    # Mini-Dashboard Estadístico del Aula
+    df_actual = st.session_state["df_alumnos"]
+    total_alumnos_dash = len(df_actual)
+    nota_media_grupo = float(df_actual["Nota_Media"].mean()) if total_alumnos_dash > 0 else 0.0
+    alumnos_riesgo = df_actual[(df_actual["Nota_Media"] < 5.0) | (df_actual["Faltas_Acumuladas"] > 4)]
+    num_riesgo = len(alumnos_riesgo)
+    pct_riesgo = (num_riesgo / total_alumnos_dash * 100) if total_alumnos_dash > 0 else 0.0
+    total_faltas_acum = int(df_actual["Faltas_Acumuladas"].sum())
+
+    st.markdown("### 📊 Mini-Dashboard Estadístico del Aula")
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1:
+        st.metric(
+            label="Nota Media del Grupo",
+            value=f"{nota_media_grupo:.2f} / 10",
+            delta="Aprobado General" if nota_media_grupo >= 5.0 else "Alerta Rendimiento",
+            delta_color="normal" if nota_media_grupo >= 5.0 else "inverse"
+        )
+    with col_m2:
+        st.metric(
+            label="% Alumnos en Riesgo (Nota < 5 o > 4 faltas)",
+            value=f"{pct_riesgo:.1f}%",
+            delta=f"{num_riesgo} de {total_alumnos_dash} alumnos",
+            delta_color="inverse" if num_riesgo > 0 else "normal"
+        )
+    with col_m3:
+        st.metric(
+            label="Total Faltas Acumuladas",
+            value=f"{total_faltas_acum} faltas",
+            delta=f"Media: {total_faltas_acum/total_alumnos_dash:.1f} por alumno" if total_alumnos_dash > 0 else None,
+            delta_color="off"
+        )
+
+    # Gráficos visuales nativos de Streamlit: correlación absentismo y rendimiento
+    col_ch1, col_ch2 = st.columns([1, 1])
+    with col_ch1:
+        st.markdown("**📉 Correlación: Faltas Acumuladas vs. Nota Media**")
+        st.caption("Visualiza el impacto directo de las ausencias en las calificaciones por Perfil DUA.")
+        st.scatter_chart(
+            df_actual,
+            x="Faltas_Acumuladas",
+            y="Nota_Media",
+            color="Perfil_DUA",
+            height=260
+        )
+    with col_ch2:
+        st.markdown("**📊 Faltas Acumuladas por Código ALU_XX**")
+        st.caption("Comparativa individual frente al umbral crítico de absentismo (>4 faltas).")
+        df_faltas_chart = df_actual.set_index("ID_Alumno")[["Faltas_Acumuladas"]]
+        st.bar_chart(
+            df_faltas_chart,
+            color="#ef4444",
+            height=260
+        )
+
+    st.divider()
     st.subheader("Tabla Interactiva de Clase (3º ESO)")
     st.caption("Modifica la asistencia de hoy o las observaciones directamente en la tabla. Los cambios se reflejarán inmediatamente.")
     
@@ -440,85 +619,185 @@ with tab1:
 
 
 # =============================================================================
-# PESTAÑA 2: 📅 DISTRIBUCIÓN DE HORAS Y TEMARIO
+# PESTAÑA 2: 📅 PLANIFICACIÓN CURRICULAR Y GESTIÓN DE AULA
 # =============================================================================
 with tab2:
-    st.header("📅 Planificación Curricular y Temporalización Realista")
-    st.markdown("Diseña una secuenciación didáctica sesión por sesión para 3º de ESO, considerando festivos, repasos cooperativos y sesiones de evaluación formativa.")
+    st.header("📅 Planificación Curricular y Gestión de Aula")
+    st.markdown("Herramientas para la secuenciación de unidades didácticas y resolución inmediata de sustituciones o guardias de aula.")
     
-    with st.form("form_temporalizacion"):
-        col_t1, col_t2 = st.columns([2, 1])
-        with col_t1:
-            tema_matematicas = st.text_input(
-                "Unidad Didáctica o Tema:",
-                value="Ecuaciones de 1er y 2º Grado y Sistemas de Ecuaciones Lineales"
-            )
-        with col_t2:
-            nivel_grupo = st.selectbox(
-                "Nivel general del grupo:",
+    subtab_temario, subtab_guardia = st.tabs([
+        "📅 Distribución de Horas y Temario",
+        "🚨 Modo Guardia Express"
+    ])
+    
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 1: DISTRIBUCIÓN DE HORAS Y TEMARIO
+    # -------------------------------------------------------------------------
+    with subtab_temario:
+        st.subheader("Secuenciación Didáctica y Temporalización Realista")
+        st.caption("Diseña una programación sesión por sesión para 3º de ESO, considerando festivos, repasos cooperativos y sesiones de evaluación formativa.")
+        
+        with st.form("form_temporalizacion"):
+            col_t1, col_t2 = st.columns([2, 1])
+            with col_t1:
+                tema_matematicas = st.text_input(
+                    "Unidad Didáctica o Tema:",
+                    value="Ecuaciones de 1er y 2º Grado y Sistemas de Ecuaciones Lineales"
+                )
+            with col_t2:
+                nivel_grupo = st.selectbox(
+                    "Nivel general del grupo:",
+                    [
+                        "Heterogéneo con necesidad de refuerzo",
+                        "Estándar curricular 3º ESO",
+                        "Avanzado con buen ritmo de trabajo",
+                        "Grupo con alta dispersión y desmotivación inicial"
+                    ]
+                )
+                
+            col_h1, col_h2, col_h3 = st.columns(3)
+            with col_h1:
+                horas_totales = st.number_input("Sesiones totales estimadas:", min_value=4, max_value=40, value=14, step=1)
+            with col_h2:
+                dias_perdidos = st.number_input("Festivos / Huelgas / Salidas:", min_value=0, max_value=10, value=2, step=1)
+            with col_h3:
+                frecuencia = st.selectbox("Frecuencia lectiva:", ["3 sesiones semanales", "4 sesiones semanales"])
+                
+            sesiones_efectivas = max(1, horas_totales - dias_perdidos)
+            st.info(f"💡 **Sesiones lectivas netas de aula disponibles:** {sesiones_efectivas} sesiones (calculado restando {dias_perdidos} días no lectivos de {horas_totales} totales).")
+            
+            enfoque_metodologico = st.multiselect(
+                "Metodologías clave a incorporar:",
                 [
-                    "Heterogéneo con necesidad de refuerzo",
-                    "Estándar curricular 3º ESO",
-                    "Avanzado con buen ritmo de trabajo",
-                    "Grupo con alta dispersión y desmotivación inicial"
-                ]
+                    "Resolución cooperativa de problemas (Tutoría entre iguales)",
+                    "Pautas DUA (Andamiaje visual y enunciados graduados)",
+                    "Uso de GeoGebra o calculadoras como apoyo",
+                    "Gamificación corta / Rutinas de pensamiento (Ticket de salida)"
+                ],
+                default=["Resolución cooperativa de problemas (Tutoría entre iguales)", "Pautas DUA (Andamiaje visual y enunciados graduados)"]
             )
             
-        col_h1, col_h2, col_h3 = st.columns(3)
-        with col_h1:
-            horas_totales = st.number_input("Sesiones totales estimadas:", min_value=4, max_value=40, value=14, step=1)
-        with col_h2:
-            dias_perdidos = st.number_input("Festivos / Huelgas / Salidas:", min_value=0, max_value=10, value=2, step=1)
-        with col_h3:
-            frecuencia = st.selectbox("Frecuencia lectiva:", ["3 sesiones semanales", "4 sesiones semanales"])
-            
-        sesiones_efectivas = max(1, horas_totales - dias_perdidos)
-        st.info(f"💡 **Sesiones lectivas netas de aula disponibles:** {sesiones_efectivas} sesiones (calculado restando {dias_perdidos} días no lectivos de {horas_totales} totales).")
-        
-        enfoque_metodologico = st.multiselect(
-            "Metodologías clave a incorporar:",
-            [
-                "Resolución cooperativa de problemas (Tutoría entre iguales)",
-                "Pautas DUA (Andamiaje visual y enunciados graduados)",
-                "Uso de GeoGebra o calculadoras como apoyo",
-                "Gamificación corta / Rutinas de pensamiento (Ticket de salida)"
-            ],
-            default=["Resolución cooperativa de problemas (Tutoría entre iguales)", "Pautas DUA (Andamiaje visual y enunciados graduados)"]
-        )
-        
-        btn_planificar = st.form_submit_button("🗓️ Generar Secuenciación Didáctica Completa", type="primary")
+            btn_planificar = st.form_submit_button("🗓️ Generar Secuenciación Didáctica Completa", type="primary")
 
-    if btn_planificar:
-        with st.spinner("Diseñando la programación sesión por sesión..."):
-            prompt_plan = f"""
-            Diseña una temporalización didáctica realista y detallada para el departamento de Matemáticas de 3º de ESO.
-            
-            PARÁMETROS DE LA PROGRAMACIÓN:
-            - Unidad Temática: {tema_matematicas}
-            - Sesiones reales lectivas: {sesiones_efectivas} sesiones (ya se han descontado {dias_perdidos} festivos/días perdidos).
-            - Nivel del grupo: {nivel_grupo}
-            - Frecuencia semanal: {frecuencia}
-            - Enfoques pedagógicos seleccionados: {', '.join(enfoque_metodologico)}
-            
-            ESTRUCTURA OBLIGATORIA QUE DEBE TENER LA RESPUESTA:
-            1. **Tabla Resumen de la Unidad**: Objetivos competenciales clave y criterios de evaluación según currículo oficial de 3º ESO.
-            2. **Desglose Sesión por Sesión (Sesión 1 a Sesión {sesiones_efectivas})**:
-               Para cada sesión, incluye obligatoriamente:
-               - *Título y Contenido específico*.
-               - *Estructura de la sesión (50 min)*: 10 min activación/repaso inicial, 30 min práctica guiada/autónoma, 10 min comprobación/cierre (ticket de salida).
-               - *Medida de Atención a la Diversidad (DUA)*: Ajuste específico para alumnos de refuerzo o TDAH.
-            3. **Sesiones Especiales Obligatorias**:
-               - Debe incluir al menos 1 o 2 sesiones finales dedicadas expresamente a resolución de dudas y simulacro de examen en parejas de tutoría entre iguales.
-               - Debe incluir la sesión de Evaluación Sumativa (Prueba escrita/competencial).
-               - Debe incluir una sesión posterior de Retroalimentación, coevaluación y corrección activa de errores.
-            4. **Estrategia ante imprevistos**: Recomendación de qué actividades compactar si se pierde una sesión adicional.
-            """
-            
-            system_instruction = "Eres un jefe de departamento de Matemáticas de Educación Secundaria en España, experto en diseño curricular LOMLOE, metodología DUA y planificación docente efectiva."
-            plan_generado = call_gemini(prompt_plan, system_instruction)
-            
+        if btn_planificar:
+            with st.spinner("Diseñando la programación sesión por sesión..."):
+                prompt_plan = f"""
+                Diseña una temporalización didáctica realista y detallada para el departamento de Matemáticas de 3º de ESO.
+                
+                PARÁMETROS DE LA PROGRAMACIÓN:
+                - Unidad Temática: {tema_matematicas}
+                - Sesiones reales lectivas: {sesiones_efectivas} sesiones (ya se han descontado {dias_perdidos} festivos/días perdidos).
+                - Nivel del grupo: {nivel_grupo}
+                - Frecuencia semanal: {frecuencia}
+                - Enfoques pedagógicos seleccionados: {', '.join(enfoque_metodologico)}
+                
+                ESTRUCTURA OBLIGATORIA QUE DEBE TENER LA RESPUESTA:
+                1. **Tabla Resumen de la Unidad**: Objetivos competenciales clave y criterios de evaluación según currículo oficial de 3º ESO.
+                2. **Desglose Sesión por Sesión (Sesión 1 a Sesión {sesiones_efectivas})**:
+                   Para cada sesión, incluye obligatoriamente:
+                   - *Título y Contenido específico*.
+                   - *Estructura de la sesión (50 min)*: 10 min activación/repaso inicial, 30 min práctica guiada/autónoma, 10 min comprobación/cierre (ticket de salida).
+                   - *Medida de Atención a la Diversidad (DUA)*: Ajuste específico para alumnos de refuerzo o TDAH.
+                3. **Sesiones Especiales Obligatorias**:
+                   - Debe incluir al menos 1 o 2 sesiones finales dedicadas expresamente a resolución de dudas y simulacro de examen en parejas de tutoría entre iguales.
+                   - Debe incluir la sesión de Evaluación Sumativa (Prueba escrita/competencial).
+                   - Debe incluir una sesión posterior de Retroalimentación, coevaluación y corrección activa de errores.
+                4. **Estrategia ante imprevistos**: Recomendación de qué actividades compactar si se pierde una sesión adicional.
+                """
+                
+                system_instruction = "Eres un jefe de departamento de Matemáticas de Educación Secundaria en España, experto en diseño curricular LOMLOE, metodología DUA y planificación docente efectiva."
+                plan_generado = call_gemini(prompt_plan, system_instruction)
+                st.session_state["ultimo_plan_temario"] = plan_generado
+
+        if st.session_state.get("ultimo_plan_temario"):
+            st.markdown("---")
             st.markdown("### 📅 Propuesta de Temporalización Curricular")
-            st.markdown(plan_generado)
+            st.markdown(st.session_state["ultimo_plan_temario"])
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 2: 🚨 MODO GUARDIA EXPRESS
+    # -------------------------------------------------------------------------
+    with subtab_guardia:
+        st.subheader("🚨 Generador de Fichas de Guardia de Emergencia")
+        st.markdown("Genera una ficha autocontenida para **50 minutos de guardia** con ejercicios graduados y una **hoja de soluciones detalladas paso a paso**, pensada para que cualquier profesor de guardia (de Historia, Inglés, Educación Física, etc.) pueda atender y corregir la clase con solvencia.")
+
+        with st.form("form_guardia"):
+            col_g1, col_g2 = st.columns([1, 2])
+            with col_g1:
+                curso_guardia = st.selectbox("Curso / Nivel:", ["3º ESO", "1º ESO", "2º ESO", "4º ESO"], index=0)
+                duracion_guardia = st.selectbox("Duración de la guardia:", ["50 minutos (Sesión estándar)", "45 minutos", "55 minutos"])
+            with col_g2:
+                tema_guardia = st.text_input("Tema actual que tocaba dar hoy:", value="Ecuaciones de 1er y 2º grado y problemas numéricos")
+                nivel_guardia = st.selectbox("Nivel general del grupo:", ["Heterogéneo / Estándar", "Refuerzo prioritario (necesita guía paso a paso)", "Avanzado / Ritmo alto"])
+                
+            btn_guardia = st.form_submit_button("⚡ Generar Ficha de Guardia de Emergencia", type="primary")
+
+        if btn_guardia:
+            with st.spinner("Diseñando ficha de guardia autocontenida con guía para profesor no especialista..."):
+                prompt_guardia = f"""
+                Actúa como un profesor de Matemáticas de Secundaria experto en didáctica escolar.
+                Diseña una FICHA DE GUARDIA DE EMERGENCIA completa, 100% autocontenida y estructurada para una clase de {duracion_guardia} en {curso_guardia}.
+                
+                PARÁMETROS:
+                - Curso: {curso_guardia}
+                - Tema previsto para hoy: {tema_guardia}
+                - Duración: {duracion_guardia}
+                - Nivel del grupo: {nivel_guardia}
+                
+                OBJETIVO PRINCIPAL:
+                Esta ficha debe permitir que un profesor/a de guardia de CUALQUIER OTRA ESPECIALIDAD (Historia, Educación Física, Lengua, etc.) que no sea de Matemáticas pueda dinamizar la clase, mantener el orden de trabajo y escribir o comprobar las soluciones en la pizarra con total seguridad y sin dudas.
+                
+                ESTRUCTURA OBLIGATORIA (MARKDOWN LIMPIO):
+                # FICHA DE GUARDIA DE MATEMÁTICAS ({curso_guardia})
+                ## Tema: {tema_guardia}
+                
+                ### 📌 1. Instrucciones para el Profesor/a de Guardia (5 minutos)
+                - Pautas claras de entrada: organización del aula, ritmo de trabajo individual o en parejas y qué hacer si surgen dudas.
+                
+                ### 🚀 2. Actividad de Activación / Calentamiento (5-10 minutos)
+                - 2 preguntas de cálculo mental o repaso conceptual rápido para centrar la atención en la pizarra.
+                
+                ### 📝 3. Ficha de Trabajo para el Alumnado (4 Ejercicios Graduados) (30 minutos)
+                - **Ejercicio 1 (Nivel Básico / Algorítmico)**: Ejercicio guiado con coeficientes sencillos.
+                - **Ejercicio 2 (Nivel Medio / Comprensión)**: Aplicación directa del procedimiento.
+                - **Ejercicio 3 (Nivel Aplicación / Problema Cotidiano)**: Situación práctica sencilla y motivadora.
+                - **Ejercicio 4 (Reto / Ampliación)**: Para quienes terminen rápido, evitando distracciones.
+                *(Escribe todas las fórmulas matemáticas en formato LaTeX limpio: $...$ y $$...$$)*.
+                
+                ---
+                
+                ### 🔑 4. Hoja de Soluciones Razonadas para la Pizarra (Uso Docente) (10 minutos)
+                - Solución paso a paso de cada uno de los 4 ejercicios.
+                - Explicación en lenguaje sencillo indicando exactamente qué escribir en la pizarra y qué errores comunes corregir.
+                """
+                system_instruction_guardia = "Eres un formador de docentes de Matemáticas en España. Generas materiales de aula estructurados, claros y comprensibles para cualquier profesor de guardia."
+                ficha_generada = call_gemini(prompt_guardia, system_instruction_guardia)
+                st.session_state["ultima_ficha_guardia"] = ficha_generada
+                st.session_state["ultimo_tema_guardia"] = tema_guardia
+                st.session_state["ultimo_curso_guardia"] = curso_guardia
+
+        if st.session_state.get("ultima_ficha_guardia"):
+            st.markdown("---")
+            st.markdown("### 📄 Ficha de Guardia Generada")
+            st.markdown(st.session_state["ultima_ficha_guardia"])
+            
+            # Botón de Descarga en Word (.docx)
+            try:
+                docx_guardia_file = create_docx_from_markdown(
+                    st.session_state["ultima_ficha_guardia"],
+                    title=f"Ficha de Guardia - {st.session_state.get('ultimo_tema_guardia', 'Matemáticas')}",
+                    curso=st.session_state.get("ultimo_curso_guardia", "3º ESO")
+                )
+                st.download_button(
+                    label="⬇️ Descargar Ficha de Guardia en Word (.docx)",
+                    data=docx_guardia_file,
+                    file_name=f"ficha_guardia_{st.session_state.get('ultimo_tema_guardia', 'mates').lower().replace(' ', '_')[:25]}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    key="btn_descarga_docx_guardia"
+                )
+            except Exception as e:
+                st.error(f"Error al exportar ficha a Word: {str(e)}")
 
 
 # =============================================================================
@@ -600,9 +879,31 @@ with tab3:
                 
                 system_instruction = "Eres un catedrático de Matemáticas de Secundaria y formador de profesorado en DUA. Tus salidas son pedagógicamente impecables y usan LaTeX matemáticamente riguroso."
                 material_dua = call_gemini(prompt_dua, system_instruction)
-                
-                st.markdown("---")
-                st.markdown(material_dua)
+                st.session_state["ultimo_material_dua"] = material_dua
+                st.session_state["ultimo_tema_dua"] = tema_examen
+
+    if st.session_state.get("ultimo_material_dua"):
+        st.markdown("---")
+        st.markdown("### 📋 Material DUA Generado")
+        st.markdown(st.session_state["ultimo_material_dua"])
+        
+        # Botón de Descarga en Word (.docx) con cabecera formal
+        try:
+            docx_dua_file = create_docx_from_markdown(
+                st.session_state["ultimo_material_dua"],
+                title=f"Prueba / Actividades DUA - {st.session_state.get('ultimo_tema_dua', 'Matemáticas')}",
+                curso="3º ESO"
+            )
+            st.download_button(
+                label="⬇️ Descargar Material DUA en Word (.docx)",
+                data=docx_dua_file,
+                file_name=f"material_dua_{st.session_state.get('ultimo_tema_dua', 'mates').lower().replace(' ', '_')[:25]}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+                key="btn_descarga_docx_dua"
+            )
+        except Exception as e:
+            st.error(f"Error al exportar material DUA a Word: {str(e)}")
 
 
 # =============================================================================
