@@ -561,6 +561,150 @@ with tab1:
             st.markdown("### 📋 Borrador Generado")
             st.text_area("Copia el texto del documento:", value=respuesta_borrador, height=350)
 
+    st.markdown("---")
+    st.subheader("👨‍👩‍👧‍👦 Ficha Preparatoria para Entrevistas con Familias (Tutoría Oficial)")
+    st.markdown("Genera un informe sintético y conciso de todas las características del alumno/a, junto con una guía práctica de explicaciones para los padres y propuesta de compromisos mutuos.")
+
+    col_fam1, col_fam2 = st.columns([1, 1])
+    with col_fam1:
+        alumnos_lista = edited_df["ID_Alumno"].tolist()
+        def format_alumno_label(cod):
+            row = edited_df[edited_df["ID_Alumno"] == cod].iloc[0]
+            alerta = "⚠️ Alerta" if row["Faltas_Acumuladas"] > 4 or row["Nota_Media"] < 5.0 else "✅ Normal"
+            return f"{cod} — Nota: {row['Nota_Media']:.1f} | {row['Faltas_Acumuladas']} faltas | {row['Perfil_DUA']} ({alerta})"
+
+        alumno_fam_sel = st.selectbox(
+            "Selecciona el alumno/a para la entrevista de tutoría:",
+            alumnos_lista,
+            format_func=format_alumno_label,
+            key="sel_alumno_entrevista"
+        )
+        datos_fam = edited_df[edited_df["ID_Alumno"] == alumno_fam_sel].iloc[0]
+
+    with col_fam2:
+        motivo_entrevista = st.selectbox(
+            "Motivo principal o enfoque prioritario de la reunión:",
+            [
+                "Seguimiento trimestral ordinario (Evolución global y hábitos)",
+                "Preocupación por bajo rendimiento o riesgo de evaluación negativa",
+                "Absentismo escolar reiterado o acumulación de faltas",
+                "Dificultades de atención, organización o desmotivación en clase",
+                "Atención a la diversidad / Adaptación DUA y pautas para el hogar",
+                "Orientación académica y altas capacidades / motivación extra"
+            ],
+            key="sel_motivo_entrevista"
+        )
+
+    apuntes_tutor = st.text_input(
+        "Apuntes o hechos recientes observados por el docente (opcional):",
+        placeholder="Ej: Buena actitud cuando trabaja en equipo, pero le cuesta entregar tareas a tiempo y despista...",
+        key="input_apuntes_tutor"
+    )
+
+    # Métricas clave del alumno seleccionado
+    col_m_alu1, col_m_alu2, col_m_alu3, col_m_alu4 = st.columns(4)
+    with col_m_alu1:
+        st.metric("Código Alumno", datos_fam["ID_Alumno"])
+    with col_m_alu2:
+        st.metric(
+            "Nota Media",
+            f"{datos_fam['Nota_Media']:.1f} / 10",
+            delta="Aprobado" if datos_fam["Nota_Media"] >= 5.0 else "Suspenso",
+            delta_color="normal" if datos_fam["Nota_Media"] >= 5.0 else "inverse"
+        )
+    with col_m_alu3:
+        st.metric(
+            "Faltas Acumuladas",
+            f"{datos_fam['Faltas_Acumuladas']} faltas",
+            delta="Protocolo Absentismo" if datos_fam["Faltas_Acumuladas"] > 4 else "Bajo control",
+            delta_color="inverse" if datos_fam["Faltas_Acumuladas"] > 4 else "normal"
+        )
+    with col_m_alu4:
+        st.metric("Perfil DUA", datos_fam["Perfil_DUA"])
+
+    if st.button("📋 Generar Ficha Completa para la Entrevista con Familias", type="primary", key="btn_generar_ficha_fam"):
+        with st.spinner("Sintetizando perfil del alumno y preparando argumentos y explicaciones para la familia..."):
+            prompt_ficha = f"""
+            Actúa como un profesor tutor experimentado de Matemáticas de 3º de ESO en España, especialista en orientación educativa y atención a la diversidad (DUA).
+            Genera una FICHA PREPARATORIA COMPLETA Y ESTRUCTURADA PARA UNA ENTREVISTA DE TUTORÍA CON LA FAMILIA DEL ALUMNO.
+            
+            DATOS OFICIALES DEL ALUMNO (RGPD ESTRICTO - IDENTIFICADO SOLO COMO {datos_fam['ID_Alumno']}):
+            - Código identificador: {datos_fam['ID_Alumno']}
+            - Calificación media actual: {datos_fam['Nota_Media']} / 10
+            - Faltas de asistencia acumuladas: {datos_fam['Faltas_Acumuladas']} faltas
+            - Perfil de atención a la diversidad (DUA): {datos_fam['Perfil_DUA']}
+            - Observaciones del cuaderno docente: {datos_fam['Observaciones_Docente']}
+            - Motivo principal de la reunión: {motivo_entrevista}
+            - Apuntes específicos aportados por el tutor: {apuntes_tutor if apuntes_tutor.strip() else 'Sin apuntes adicionales'}
+
+            DIRECTRICES CRÍTICAS:
+            1. PRIVACIDAD RGPD: Usa EXCLUSIVAMENTE el código '{datos_fam['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
+            2. TONO Y ESTILO: Empático, constructivo, institucional y colaborativo. No uses un tono acusatorio; la familia debe percibir que el centro busca soluciones conjuntas.
+            3. TRADUCCIÓN PEDAGÓGICA CLARA: Convierte los tecnicismos (DUA, descriptores, competencias) en explicaciones sencillas y comprensibles para padres no docentes.
+
+            ESTRUCTURA OBLIGATORIA DE LA RESPUESTA EN MARKDOWN:
+
+            # 📋 FICHA PREPARATORIA DE ENTREVISTA CON FAMILIA — {datos_fam['ID_Alumno']}
+
+            ## 1. 📊 INFORME CONCISO DE CARACTERÍSTICAS DEL ALUMNO (Radiografía para el Docente)
+            - **Diagnóstico General:** Estado global del alumno en 3 líneas concisas (favorable, atención preventiva o intervención urgente).
+            - **Rendimiento Académico en Matemáticas:** Valoración cualitativa de su nota ({datos_fam['Nota_Media']}/10), señalando qué contenidos o competencias domina y en qué aspectos presenta mayores dificultades.
+            - **Asistencia y Puntualidad:** Análisis del impacto de sus {datos_fam['Faltas_Acumuladas']} faltas en el seguimiento de la materia.
+            - **Perfil DUA y Estilo de Aprendizaje:** Qué implicaciones prácticas tiene su perfil ({datos_fam['Perfil_DUA']}) y qué medidas metodológicas se aplican en el aula.
+            - **Observaciones de Aula:** Síntesis de las notas del cuaderno del profesor.
+
+            ## 2. 🗣️ GUÍA DE EXPLICACIONES PARA LOS PADRES (Traducción Pedagógica Cercana)
+            - **Apertura de la Reunión (Puntos Fuertes):** 2 o 3 fortalezas, cualidades o actitudes positivas del alumno/a que el tutor debe destacar al inicio para abrir la conversación en un clima de confianza.
+            - **Cómo explicar su nivel en Matemáticas:** Argumentos claros, serenos y sin tecnicismos para explicar a los padres cómo va su hijo/a, evitando alarmismos pero con total honestidad.
+            - **Cómo explicar su perfil DUA a la familia:** Pautas sencillas y desestigmatizantes para explicar cómo procesa la información y qué apoyos recibe en clase.
+            - **Actitud, convivencia y hábitos de trabajo:** Cómo transmitir observaciones sobre su constancia, autonomía, cuidado del material y relación con sus compañeros.
+
+            ## 3. 🤝 COMPROMISOS COMPARTIDOS (Pacto de Colaboración Familia - Centro)
+            - **Compromisos Concretos para la Familia en Casa:** 3 pautas realistas, medibles y viables para la familia (ej. horario fijo de 30 min sin pantallas, supervisión semanal de libreta/classroom, rutina de descanso).
+            - **Compromisos del Profesor/Tutor en el Aula:** 2 medidas concretas de seguimiento pedagógico que el docente se compromete a realizar (ej. supervisión de notas guiadas, apoyo entre iguales, comprobación semanal).
+
+            ## 4. ❓ PREGUNTAS ESTRATÉGICAS PARA INDAGAR CON LA FAMILIA
+            - 3 preguntas clave, abiertas y respetuosas para conocer mejor la dinámica del alumno en casa (hábitos de estudio, nivel de frustración ante las tareas, descanso nocturno y motivación).
+            """
+
+            system_instruction = "Eres un tutor y orientador de Educación Secundaria en España, experto en comunicación asertiva con familias, marco DUA y legislación educativa LOMLOE."
+            ficha_generada = call_gemini(prompt_ficha, system_instruction)
+            st.session_state["ultima_ficha_familia"] = ficha_generada
+            st.session_state["ultimo_alumno_ficha"] = datos_fam["ID_Alumno"]
+
+    if st.session_state.get("ultima_ficha_familia"):
+        st.markdown("---")
+        st.markdown("### 📄 Ficha de Entrevista Generada")
+        st.markdown(st.session_state["ultima_ficha_familia"])
+
+        col_exp1, col_exp2 = st.columns([1, 1])
+        with col_exp1:
+            try:
+                docx_ficha = create_docx_from_markdown(
+                    st.session_state["ultima_ficha_familia"],
+                    title=f"Ficha Entrevista Familia - {st.session_state.get('ultimo_alumno_ficha', 'Alumno')}",
+                    curso="3º ESO"
+                )
+                st.download_button(
+                    label="⬇️ Descargar Ficha en Word (.docx)",
+                    data=docx_ficha,
+                    file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    key="btn_descarga_docx_ficha"
+                )
+            except Exception as e:
+                st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
+        with col_exp2:
+            st.download_button(
+                label="⬇️ Descargar Ficha en Texto (.txt)",
+                data=st.session_state["ultima_ficha_familia"],
+                file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                key="btn_descarga_txt_ficha"
+            )
+
 
 # =============================================================================
 # PESTAÑA 2: 📅 PLANIFICACIÓN CURRICULAR Y GESTIÓN DE AULA

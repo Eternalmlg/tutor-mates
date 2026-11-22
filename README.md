@@ -51,6 +51,16 @@ La aplicación organiza el trabajo en 5 pestañas profesionales:
 - **Redacción Automatizada de Partes Oficiales con IA:**
   - Generación de partes para **Jefatura de Estudios / Comisión de Absentismo**.
   - Citaciones formales para **Familias y Tutores Legales**, cumpliendo con la normativa de absentismo de ESO.
+- **Ficha Preparatoria para Entrevistas con Familias (Tutoría Oficial):**
+  - Generador inteligente de informes y guías de conversación para reuniones presenciales o telemáticas con los padres y tutores legales.
+  - **Selector Enriquecido:** Mapeo instantáneo del estado de cada estudiante (`ALU_XX`) indicando nota media, faltas acumuladas, perfil DUA e indicadores de alerta.
+  - **Personalización por Motivo de Reunión:** Permite orientar la entrevista según el objetivo (seguimiento ordinario, riesgo de suspenso, absentismo, atención/desmotivación, pautas DUA para casa o altas capacidades), con opción de incorporar apuntes u observaciones docentes de última hora.
+  - **Estructura Pedagógica en 4 Bloques:**
+    1. *Informe Conciso del Alumno (Uso Docente):* Diagnóstico global en 3 líneas, radiografía de competencias matemáticas ({nota}/10), impacto del absentismo y síntesis del cuaderno docente.
+    2. *Guía de Explicaciones para los Padres:* Traducción de conceptos pedagógicos a un lenguaje cercano y empático, apertura constructiva destacando virtudes y fortalezas, desestigmatización del perfil DUA y comunicación asertiva sobre actitud y hábitos.
+    3. *Compromisos Compartidos (Pacto Familia-Centro):* 3 pautas realistas para el hogar (rutinas de estudio sin pantallas, revisión de agenda, descanso) y 2 compromisos de seguimiento del profesor en el aula.
+    4. *Preguntas Estratégicas para la Familia:* Cuestiones clave para indagar la dinámica del alumno en casa (autonomía ante los deberes, frustración, motivación).
+  - **Doble Exportación Formal:** Descarga con un solo clic en **Microsoft Word (`.docx`)** con cabecera institucional oficial para llevarla impresa a la entrevista, y en **texto plano (`.txt`)** para archivo rápido en notas de tutoría.
 
 ### 📅 Pestaña 2: Planificación de Aula
 Organizada en dos sub-pestañas:
