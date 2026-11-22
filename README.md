@@ -51,9 +51,19 @@ La aplicación organiza el trabajo en 5 pestañas profesionales:
 - **Redacción Automatizada de Partes Oficiales con IA:**
   - Generación de partes para **Jefatura de Estudios / Comisión de Absentismo**.
   - Citaciones formales para **Familias y Tutores Legales**, cumpliendo con la normativa de absentismo de ESO.
+- **Ficha Preparatoria para Entrevistas con Familias (Tutoría Oficial):**
+  - Generador inteligente de informes y guías de conversación para reuniones presenciales o telemáticas con los padres y tutores legales.
+  - **Selector Enriquecido:** Mapeo instantáneo del estado de cada estudiante (`ALU_XX`) indicando nota media, faltas acumuladas, perfil DUA e indicadores de alerta.
+  - **Personalización por Motivo de Reunión:** Permite orientar la entrevista según el objetivo (seguimiento ordinario, riesgo de suspenso, absentismo, atención/desmotivación, pautas DUA para casa o altas capacidades), con opción de incorporar apuntes u observaciones docentes de última hora.
+  - **Estructura Pedagógica en 4 Bloques:**
+    1. *Informe Conciso del Alumno (Uso Docente):* Diagnóstico global en 3 líneas, radiografía de competencias matemáticas ({nota}/10), impacto del absentismo y síntesis del cuaderno docente.
+    2. *Guía de Explicaciones para los Padres:* Traducción de conceptos pedagógicos a un lenguaje cercano y empático, apertura constructiva destacando virtudes y fortalezas, desestigmatización del perfil DUA y comunicación asertiva sobre actitud y hábitos.
+    3. *Compromisos Compartidos (Pacto Familia-Centro):* 3 pautas realistas para el hogar (rutinas de estudio sin pantallas, revisión de agenda, descanso) y 2 compromisos de seguimiento del profesor en el aula.
+    4. *Preguntas Estratégicas para la Familia:* Cuestiones clave para indagar la dinámica del alumno en casa (autonomía ante los deberes, frustración, motivación).
+  - **Doble Exportación Formal:** Descarga con un solo clic en **Microsoft Word (`.docx`)** con cabecera institucional oficial para llevarla impresa a la entrevista, y en **texto plano (`.txt`)** para archivo rápido en notas de tutoría.
 
 ### 📅 Pestaña 2: Planificación de Aula
-Organizada en dos sub-pestañas:
+Organizada en tres sub-pestañas:
 - **Sub-pestaña '📅 Distribución de Horas y Temario':**
   - Cálculo automático de sesiones netas descontando festivos y días no lectivos.
   - Secuenciación didáctica sesión por sesión (estructura 10-30-10 min) con adaptaciones DUA.
@@ -66,6 +76,16 @@ Organizada en dos sub-pestañas:
     3. Cuatro ejercicios graduados en dificultad (básico, comprensión, problema aplicado y reto).
     4. **Hoja de soluciones explicadas paso a paso en lenguaje accesible**, redactada específicamente para que un docente de cualquier otra especialidad (Historia, Inglés, Educación Física, etc.) pueda escribir y corregir los ejercicios en la pizarra con total tranquilidad.
   - **Descarga real en Word (`.docx`):** Exportación con cabecera formal institucional.
+- **Sub-pestaña '🏆 Reto Matemático Semanal (Gamificación)':**
+  - Generador de desafíos lúdicos semanales, enigmas y dinámicas tipo *Escape Room* de aula para dinamizar las clases de 3º de ESO y atender a *Altas Capacidades*.
+  - **Ambientaciones Narrativas Diversas:** Misterio detectivesco (descifrado de claves secretas), Escape Room (3 candados matemáticos), Misión espacial/científica contrarreloj, acertijos históricos y dilemas de lógica cotidiana.
+  - **Graduación de Dificultad:** Opciones de reto inclusivo multinivel (acceso universal por ingenio), estándar curricular con pensamiento lateral o profundización avanzada para altas capacidades.
+  - **Estructura Pedagógica de 4 Secciones:**
+    1. *Cartel / Enigma para el Alumnado:* Narrativa inmersiva, planteamiento matemático con tipografía LaTeX y clave final requerida.
+    2. *Sistema de 3 Pistas Escalonadas:* Pista 1 (activación sutil), Pista 2 (andamiaje/relación clave) y Pista 3 (empujón final) para entregar en sobres cerrados o comprar con puntos de equipo.
+    3. *Guía Docente y Solucionario Razonado:* Demostración y pasos matemáticos rigurosos, previsión de errores típicos de razonamiento y retos de extensión para quienes resuelvan en los primeros minutos.
+    4. *Mecánicas de Gamificación y Puntuación:* Baremo sugerido de puntos y orientaciones para gestionarlo con buzón físico, corcho de aula o plataforma digital.
+  - **Exportación en Word (`.docx`) y Texto (`.txt`):** Genera el cartel y la ficha del reto maquetados para imprimir y colgar en el aula o compartir en Google Classroom.
 
 ### 🎯 Pestaña 3: Diseñador de Ejercicios y Exámenes DUA
 - **Atención a la Diversidad Multinivel:** Generación simultánea de versiones adaptadas para:

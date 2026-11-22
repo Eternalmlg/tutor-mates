@@ -561,6 +561,150 @@ with tab1:
             st.markdown("### 📋 Borrador Generado")
             st.text_area("Copia el texto del documento:", value=respuesta_borrador, height=350)
 
+    st.markdown("---")
+    st.subheader("👨‍👩‍👧‍👦 Ficha Preparatoria para Entrevistas con Familias (Tutoría Oficial)")
+    st.markdown("Genera un informe sintético y conciso de todas las características del alumno/a, junto con una guía práctica de explicaciones para los padres y propuesta de compromisos mutuos.")
+
+    col_fam1, col_fam2 = st.columns([1, 1])
+    with col_fam1:
+        alumnos_lista = edited_df["ID_Alumno"].tolist()
+        def format_alumno_label(cod):
+            row = edited_df[edited_df["ID_Alumno"] == cod].iloc[0]
+            alerta = "⚠️ Alerta" if row["Faltas_Acumuladas"] > 4 or row["Nota_Media"] < 5.0 else "✅ Normal"
+            return f"{cod} — Nota: {row['Nota_Media']:.1f} | {row['Faltas_Acumuladas']} faltas | {row['Perfil_DUA']} ({alerta})"
+
+        alumno_fam_sel = st.selectbox(
+            "Selecciona el alumno/a para la entrevista de tutoría:",
+            alumnos_lista,
+            format_func=format_alumno_label,
+            key="sel_alumno_entrevista"
+        )
+        datos_fam = edited_df[edited_df["ID_Alumno"] == alumno_fam_sel].iloc[0]
+
+    with col_fam2:
+        motivo_entrevista = st.selectbox(
+            "Motivo principal o enfoque prioritario de la reunión:",
+            [
+                "Seguimiento trimestral ordinario (Evolución global y hábitos)",
+                "Preocupación por bajo rendimiento o riesgo de evaluación negativa",
+                "Absentismo escolar reiterado o acumulación de faltas",
+                "Dificultades de atención, organización o desmotivación en clase",
+                "Atención a la diversidad / Adaptación DUA y pautas para el hogar",
+                "Orientación académica y altas capacidades / motivación extra"
+            ],
+            key="sel_motivo_entrevista"
+        )
+
+    apuntes_tutor = st.text_input(
+        "Apuntes o hechos recientes observados por el docente (opcional):",
+        placeholder="Ej: Buena actitud cuando trabaja en equipo, pero le cuesta entregar tareas a tiempo y despista...",
+        key="input_apuntes_tutor"
+    )
+
+    # Métricas clave del alumno seleccionado
+    col_m_alu1, col_m_alu2, col_m_alu3, col_m_alu4 = st.columns(4)
+    with col_m_alu1:
+        st.metric("Código Alumno", datos_fam["ID_Alumno"])
+    with col_m_alu2:
+        st.metric(
+            "Nota Media",
+            f"{datos_fam['Nota_Media']:.1f} / 10",
+            delta="Aprobado" if datos_fam["Nota_Media"] >= 5.0 else "Suspenso",
+            delta_color="normal" if datos_fam["Nota_Media"] >= 5.0 else "inverse"
+        )
+    with col_m_alu3:
+        st.metric(
+            "Faltas Acumuladas",
+            f"{datos_fam['Faltas_Acumuladas']} faltas",
+            delta="Protocolo Absentismo" if datos_fam["Faltas_Acumuladas"] > 4 else "Bajo control",
+            delta_color="inverse" if datos_fam["Faltas_Acumuladas"] > 4 else "normal"
+        )
+    with col_m_alu4:
+        st.metric("Perfil DUA", datos_fam["Perfil_DUA"])
+
+    if st.button("📋 Generar Ficha Completa para la Entrevista con Familias", type="primary", key="btn_generar_ficha_fam"):
+        with st.spinner("Sintetizando perfil del alumno y preparando argumentos y explicaciones para la familia..."):
+            prompt_ficha = f"""
+            Actúa como un profesor tutor experimentado de Matemáticas de 3º de ESO en España, especialista en orientación educativa y atención a la diversidad (DUA).
+            Genera una FICHA PREPARATORIA COMPLETA Y ESTRUCTURADA PARA UNA ENTREVISTA DE TUTORÍA CON LA FAMILIA DEL ALUMNO.
+            
+            DATOS OFICIALES DEL ALUMNO (RGPD ESTRICTO - IDENTIFICADO SOLO COMO {datos_fam['ID_Alumno']}):
+            - Código identificador: {datos_fam['ID_Alumno']}
+            - Calificación media actual: {datos_fam['Nota_Media']} / 10
+            - Faltas de asistencia acumuladas: {datos_fam['Faltas_Acumuladas']} faltas
+            - Perfil de atención a la diversidad (DUA): {datos_fam['Perfil_DUA']}
+            - Observaciones del cuaderno docente: {datos_fam['Observaciones_Docente']}
+            - Motivo principal de la reunión: {motivo_entrevista}
+            - Apuntes específicos aportados por el tutor: {apuntes_tutor if apuntes_tutor.strip() else 'Sin apuntes adicionales'}
+
+            DIRECTRICES CRÍTICAS:
+            1. PRIVACIDAD RGPD: Usa EXCLUSIVAMENTE el código '{datos_fam['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
+            2. TONO Y ESTILO: Empático, constructivo, institucional y colaborativo. No uses un tono acusatorio; la familia debe percibir que el centro busca soluciones conjuntas.
+            3. TRADUCCIÓN PEDAGÓGICA CLARA: Convierte los tecnicismos (DUA, descriptores, competencias) en explicaciones sencillas y comprensibles para padres no docentes.
+
+            ESTRUCTURA OBLIGATORIA DE LA RESPUESTA EN MARKDOWN:
+
+            # 📋 FICHA PREPARATORIA DE ENTREVISTA CON FAMILIA — {datos_fam['ID_Alumno']}
+
+            ## 1. 📊 INFORME CONCISO DE CARACTERÍSTICAS DEL ALUMNO (Radiografía para el Docente)
+            - **Diagnóstico General:** Estado global del alumno en 3 líneas concisas (favorable, atención preventiva o intervención urgente).
+            - **Rendimiento Académico en Matemáticas:** Valoración cualitativa de su nota ({datos_fam['Nota_Media']}/10), señalando qué contenidos o competencias domina y en qué aspectos presenta mayores dificultades.
+            - **Asistencia y Puntualidad:** Análisis del impacto de sus {datos_fam['Faltas_Acumuladas']} faltas en el seguimiento de la materia.
+            - **Perfil DUA y Estilo de Aprendizaje:** Qué implicaciones prácticas tiene su perfil ({datos_fam['Perfil_DUA']}) y qué medidas metodológicas se aplican en el aula.
+            - **Observaciones de Aula:** Síntesis de las notas del cuaderno del profesor.
+
+            ## 2. 🗣️ GUÍA DE EXPLICACIONES PARA LOS PADRES (Traducción Pedagógica Cercana)
+            - **Apertura de la Reunión (Puntos Fuertes):** 2 o 3 fortalezas, cualidades o actitudes positivas del alumno/a que el tutor debe destacar al inicio para abrir la conversación en un clima de confianza.
+            - **Cómo explicar su nivel en Matemáticas:** Argumentos claros, serenos y sin tecnicismos para explicar a los padres cómo va su hijo/a, evitando alarmismos pero con total honestidad.
+            - **Cómo explicar su perfil DUA a la familia:** Pautas sencillas y desestigmatizantes para explicar cómo procesa la información y qué apoyos recibe en clase.
+            - **Actitud, convivencia y hábitos de trabajo:** Cómo transmitir observaciones sobre su constancia, autonomía, cuidado del material y relación con sus compañeros.
+
+            ## 3. 🤝 COMPROMISOS COMPARTIDOS (Pacto de Colaboración Familia - Centro)
+            - **Compromisos Concretos para la Familia en Casa:** 3 pautas realistas, medibles y viables para la familia (ej. horario fijo de 30 min sin pantallas, supervisión semanal de libreta/classroom, rutina de descanso).
+            - **Compromisos del Profesor/Tutor en el Aula:** 2 medidas concretas de seguimiento pedagógico que el docente se compromete a realizar (ej. supervisión de notas guiadas, apoyo entre iguales, comprobación semanal).
+
+            ## 4. ❓ PREGUNTAS ESTRATÉGICAS PARA INDAGAR CON LA FAMILIA
+            - 3 preguntas clave, abiertas y respetuosas para conocer mejor la dinámica del alumno en casa (hábitos de estudio, nivel de frustración ante las tareas, descanso nocturno y motivación).
+            """
+
+            system_instruction = "Eres un tutor y orientador de Educación Secundaria en España, experto en comunicación asertiva con familias, marco DUA y legislación educativa LOMLOE."
+            ficha_generada = call_gemini(prompt_ficha, system_instruction)
+            st.session_state["ultima_ficha_familia"] = ficha_generada
+            st.session_state["ultimo_alumno_ficha"] = datos_fam["ID_Alumno"]
+
+    if st.session_state.get("ultima_ficha_familia"):
+        st.markdown("---")
+        st.markdown("### 📄 Ficha de Entrevista Generada")
+        st.markdown(st.session_state["ultima_ficha_familia"])
+
+        col_exp1, col_exp2 = st.columns([1, 1])
+        with col_exp1:
+            try:
+                docx_ficha = create_docx_from_markdown(
+                    st.session_state["ultima_ficha_familia"],
+                    title=f"Ficha Entrevista Familia - {st.session_state.get('ultimo_alumno_ficha', 'Alumno')}",
+                    curso="3º ESO"
+                )
+                st.download_button(
+                    label="⬇️ Descargar Ficha en Word (.docx)",
+                    data=docx_ficha,
+                    file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    key="btn_descarga_docx_ficha"
+                )
+            except Exception as e:
+                st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
+        with col_exp2:
+            st.download_button(
+                label="⬇️ Descargar Ficha en Texto (.txt)",
+                data=st.session_state["ultima_ficha_familia"],
+                file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                key="btn_descarga_txt_ficha"
+            )
+
 
 # =============================================================================
 # PESTAÑA 2: 📅 PLANIFICACIÓN CURRICULAR Y GESTIÓN DE AULA
@@ -569,9 +713,10 @@ with tab2:
     st.header("📅 Planificación Curricular y Gestión de Aula")
     st.markdown("Herramientas para la secuenciación de unidades didácticas y resolución inmediata de sustituciones o guardias de aula.")
     
-    subtab_temario, subtab_guardia = st.tabs([
+    subtab_temario, subtab_guardia, subtab_reto = st.tabs([
         "📅 Distribución de Horas y Temario",
-        "🚨 Modo Guardia Express"
+        "🚨 Modo Guardia Express",
+        "🏆 Reto Matemático Semanal (Gamificación)"
     ])
     
     # -------------------------------------------------------------------------
@@ -742,6 +887,146 @@ with tab2:
                 )
             except Exception as e:
                 st.error(f"Error al exportar ficha a Word: {str(e)}")
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 3: 🏆 RETO MATEMÁTICO SEMANAL (GAMIFICACIÓN)
+    # -------------------------------------------------------------------------
+    with subtab_reto:
+        st.subheader("🏆 Reto Matemático Semanal / Escape Room de Aula")
+        st.caption("Fomenta la motivación, el pensamiento lateral y el estímulo para Altas Capacidades mediante desafíos lúdicos con pistas escalonadas y narrativa envolvente.")
+
+        with st.form("form_reto_semanal"):
+            col_r1, col_r2 = st.columns([2, 1])
+            with col_r1:
+                tema_reto = st.text_input(
+                    "Contenido o bloque matemático:",
+                    value="Ecuaciones, acertijos algebraicos y lógica proporcional",
+                    key="input_tema_reto"
+                )
+            with col_r2:
+                narrativa_reto = st.selectbox(
+                    "Ambientación / Formato del reto:",
+                    [
+                        "🕵️ Misterio detectivesco (Descifrar código o clave secreta)",
+                        "🔐 Escape Room de aula (3 candados o cerraduras matemáticas)",
+                        "🚀 Misión espacial / Misión científica contrarreloj",
+                        "🏛️ Acertijo histórico / Paradoja matemática clásica",
+                        "🍕 Dilema cotidiano / Reto de economía doméstica y lógica"
+                    ],
+                    key="sel_narrativa_reto"
+                )
+
+            col_rn1, col_rn2 = st.columns([1, 1])
+            with col_rn1:
+                dificultad_reto = st.selectbox(
+                    "Nivel de desafío pedagógico:",
+                    [
+                        "Inclusivo multinivel (Accesible con ingenio, engancha a todo el grupo)",
+                        "Estándar 3º ESO (Currículo ordinario con giro de pensamiento lateral)",
+                        "Reto de profundización / Altas Capacidades (Deducción abstracta y generalización)"
+                    ],
+                    key="sel_dificultad_reto"
+                )
+            with col_rn2:
+                modalidad_reto = st.selectbox(
+                    "Dinámica de aplicación en el aula:",
+                    [
+                        "Póster semanal en corcho (Respuestas en buzón físico hasta el viernes)",
+                        "Actividad cooperativa de inicio o cierre de sesión (15-20 min)",
+                        "Mini Escape Room por equipos (Competición con compra de pistas)"
+                    ],
+                    key="sel_modalidad_reto"
+                )
+
+            col_rc1, col_rc2 = st.columns(2)
+            with col_rc1:
+                incluir_pistas = st.checkbox("Incluir 3 pistas escalonadas (Sistema de sobres o desbloqueo gradual)", value=True, key="chk_pistas_reto")
+            with col_rc2:
+                incluir_solucionario = st.checkbox("Incluir solucionario docente detallado y variantes de ampliación", value=True, key="chk_sol_reto")
+
+            btn_generar_reto = st.form_submit_button("✨ Generar Reto Gamificado Completo", type="primary")
+
+        if btn_generar_reto:
+            with st.spinner("Diseñando reto matemático, narrativa y sistema de pistas..."):
+                prompt_reto = f"""
+                Actúa como un profesor de Matemáticas de Secundaria especialista en Gamificación Educativa, Aprendizaje Basado en Juegos (ABJ) y atención a la diversidad (DUA) en España.
+                Diseña un RETO MATEMÁTICO SEMANAL / ESCAPE ROOM MOTIVADOR para alumnos de 3º de ESO (14-15 años).
+
+                PARÁMETROS DEL RETO:
+                - Contenido Matemático: {tema_reto}
+                - Ambientación Narrativa: {narrativa_reto}
+                - Nivel de Dificultad: {dificultad_reto}
+                - Dinámica de Aula: {modalidad_reto}
+                - Incluir 3 Pistas Graduadas: {'SÍ' if incluir_pistas else 'NO'}
+                - Incluir Solucionario Docente: {'SÍ' if incluir_solucionario else 'NO'}
+
+                REGLAS DE FORMATO Y CONTENIDO (RIGUROSAS):
+                1. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones utilizando LaTeX limpio ($...$ en línea y $$...$$ en bloque).
+                2. NARRATIVA ENVOLVENTE: El problema no debe ser una cuenta aburrida, sino un misterio o reto donde las matemáticas sean la herramienta esencial para resolverlo.
+                3. ENFOQUE DUA E INCLUSIVO: La premisa debe ser atractiva y fácil de comprender, pero con profundidad suficiente para premiar la perseverancia y el razonamiento deductivo.
+
+                ESTRUCTURA OBLIGATORIA EN MARKDOWN:
+
+                # 🏆 RETO MATEMÁTICO DE LA SEMANA: [TÍTULO IMPACTANTE]
+
+                ## 📜 1. La Misión / Enigma (Cartel para el Alumnado)
+                - **Contexto Narrativo:** Breve introducción inmersiva (3-4 líneas).
+                - **El Desafío:** Planteamiento visual y matemático claro del problema con fórmulas en LaTeX.
+                - **La Pregunta Final:** Qué deben entregar exactamente (ej. un código de 3 cifras, el valor de una incógnita oculta o la justificación lógica).
+
+                ## 💡 2. Sistema de Pistas Escalonadas (Para desbloquear si hay bloqueo)
+                *(Diseñadas para entregar en sobres o previa consulta)*
+                - **Pista 1 (Activación / Enfoque inicial):** Una pista sutil para orientar por dónde empezar a organizar los datos sin desvelar cuentas.
+                - **Pista 2 (Andamiaje matemático):** Una pista intermedia que muestra la relación o ecuación clave.
+                - **Pista 3 (Empujón final):** Casi la resolución, para evitar la frustración de alumnos con dificultades.
+
+                ## 🔑 3. Guía Docente y Solucionario Razonado (Uso Exclusivo del Profesor)
+                - **Solución Matemática Completa:** Resolución algebraica o numérica paso a paso con LaTeX.
+                - **Errores Típicos Anticipados:** Qué fallos comunes de razonamiento cometerán los alumnos y cómo guiarlos con preguntas socráticas.
+                - **Ampliación para Altas Capacidades:** Una pregunta o variante adicional para los alumnos que lo resuelvan muy rápido.
+
+                ## 🎮 4. Reglas del Juego y Dinámica de Puntuación Sugerida
+                - Puntuación recomendada (ej: 100 pts sin pistas, 75 pts con Pista 1, 50 pts con Pista 2...).
+                - Cómo gestionarlo en el aula (buzón físico, corcho o plataforma virtual).
+                """
+
+                system_instruction_reto = "Eres un formador de docentes en innovación educativa y gamificación matemática para Educación Secundaria en España. Generas actividades rigurosas en contenido matemático pero sumamente atractivas y lúdicas."
+                reto_generado = call_gemini(prompt_reto, system_instruction_reto)
+                st.session_state["ultimo_reto_gamificacion"] = reto_generado
+                st.session_state["ultimo_tema_reto"] = tema_reto
+
+        if st.session_state.get("ultimo_reto_gamificacion"):
+            st.markdown("---")
+            st.markdown("### 📄 Reto Gamificado Generado")
+            st.markdown(st.session_state["ultimo_reto_gamificacion"])
+
+            col_exp_r1, col_exp_r2 = st.columns([1, 1])
+            with col_exp_r1:
+                try:
+                    docx_reto_file = create_docx_from_markdown(
+                        st.session_state["ultimo_reto_gamificacion"],
+                        title=f"Reto Semanal - {st.session_state.get('ultimo_tema_reto', 'Matemáticas')}",
+                        curso="3º ESO"
+                    )
+                    st.download_button(
+                        label="⬇️ Descargar Cartel y Ficha en Word (.docx)",
+                        data=docx_reto_file,
+                        file_name=f"reto_semanal_{st.session_state.get('ultimo_tema_reto', 'mates').lower().replace(' ', '_')[:25]}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key="btn_descarga_docx_reto"
+                    )
+                except Exception as e:
+                    st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
+            with col_exp_r2:
+                st.download_button(
+                    label="⬇️ Descargar Reto en Texto (.txt)",
+                    data=st.session_state["ultimo_reto_gamificacion"],
+                    file_name=f"reto_semanal_{st.session_state.get('ultimo_tema_reto', 'mates').lower().replace(' ', '_')[:25]}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="btn_descarga_txt_reto"
+                )
 
 
 # =============================================================================
