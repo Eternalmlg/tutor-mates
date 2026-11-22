@@ -25,10 +25,175 @@ try:
 except ImportError:
     Document = None
 
+def limpiar_latex_para_word(texto: str) -> str:
+    """
+    Convierte expresiones y fórmulas matemáticas LaTeX en texto legible con caracteres Unicode,
+    limpiando delimitadores, fracciones, raíces, exponentes, subíndices y entornos de sistemas
+    para que se visualicen correctamente en documentos Word (.docx).
+    """
+    if not texto:
+        return ""
+
+    t = texto
+
+    # 1. Limpieza de entornos de sistemas de ecuaciones (\begin{cases} ... \end{cases})
+    def _clean_cases(match):
+        content = match.group(1).strip()
+        raw_lines = re.split(r'\\\\|\n', content)
+        eqs = [re.sub(r'\s*&\s*', '  ', l).strip() for l in raw_lines if l.strip()]
+        if not eqs:
+            return ""
+        formatted = ["{ " + eqs[0]]
+        for eq in eqs[1:]:
+            formatted.append("  " + eq)
+        return "\n".join(formatted)
+
+    t = re.sub(r'\\begin\{cases\}(.*?)\\end\{cases\}', _clean_cases, t, flags=re.DOTALL)
+    # Limpiar otros entornos residuales (\begin{aligned}, etc.)
+    t = re.sub(r'\\begin\{[a-zA-Z*]+\}(\[[^\]]*\])?(\{.*?\})?', '', t)
+    t = re.sub(r'\\end\{[a-zA-Z*]+\}', '', t)
+
+    # 2. Comandos de formato: \text{...}, \textbf{...}, \mathrm{...} dejando el contenido interior
+    for _ in range(3):
+        t = re.sub(r'\\(?:text|textbf|mathrm|mathbf|mathit)\{([^{}]*)\}', r'\1', t)
+
+    # 3. Delimitadores elásticos \left y \right (conservando el paréntesis o corchete)
+    t = re.sub(r'\\left\.', '', t)
+    t = re.sub(r'\\right\.', '', t)
+    t = re.sub(r'\\left\s*\\\{', '{', t)
+    t = re.sub(r'\\right\s*\\\}', '}', t)
+    t = re.sub(r'\\left|\\right', '', t)
+
+    # 4. Símbolos de grado
+    t = re.sub(r'\^\{?\\circ\}?', '°', t)
+
+    # 5. Diccionarios y reemplazos para exponentes y subíndices a Unicode
+    sup_map = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+        '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ',
+        'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
+        'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ',
+        'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ',
+        'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ'
+    }
+    sub_map = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+        '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+        'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ',
+        'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ',
+        'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ',
+        'v': 'ᵥ', 'x': 'ₓ'
+    }
+
+    # Exponentes: ^{...} y ^x
+    t = re.sub(r'\^\{([^}]+)\}', lambda m: "".join(sup_map.get(c, c) for c in m.group(1)), t)
+    t = re.sub(r'\^([0-9+\-a-zA-Z])', lambda m: sup_map.get(m.group(1), f"^{m.group(1)}"), t)
+
+    # Subíndices: _{...} y _x
+    t = re.sub(r'_\{([^}]+)\}', lambda m: "".join(sub_map.get(c, c) for c in m.group(1)), t)
+    t = re.sub(r'_([0-9+\-a-zA-Z])', lambda m: sub_map.get(m.group(1), f"_{m.group(1)}"), t)
+
+    # 6. Raíces cuadradas y enésimas: \sqrt{x} -> √(x), \sqrt[n]{x} -> ⁿ√(x)
+    def _clean_sqrt_n(m):
+        deg = m.group(1).strip()
+        deg_sup = "".join(sup_map.get(c, c) for c in deg)
+        return f"{deg_sup}√({m.group(2).strip()})"
+
+    t = re.sub(r'\\sqrt\[([^\]]+)\]\{([^{}]+)\}', _clean_sqrt_n, t)
+    for _ in range(5):
+        if r'\sqrt' not in t:
+            break
+        t = re.sub(r'\\sqrt\{([^{}]+)\}', r'√(\1)', t)
+    t = re.sub(r'\\sqrt\s*([0-9a-zA-Z])', r'√(\1)', t)
+
+    # 7. Fracciones: \frac{a}{b} -> a/b o (a)/(b)
+    def _clean_frac(m):
+        num = m.group(1).strip()
+        den = m.group(2).strip()
+        def needs_parens(s):
+            if not s:
+                return False
+            if s.startswith('(') and s.endswith(')'):
+                return False
+            return any(c in s for c in ['+', '-', ' '])
+        num_str = f"({num})" if needs_parens(num) else num
+        den_str = f"({den})" if needs_parens(den) else den
+        return f"{num_str}/{den_str}"
+
+    for _ in range(5):
+        if r'\frac' not in t and r'\dfrac' not in t:
+            break
+        t = re.sub(r'\\(?:d)?frac\{([^{}]+)\}\{([^{}]+)\}', _clean_frac, t)
+    t = re.sub(r'\\(?:d)?frac\s*([0-9a-zA-Z])\s*([0-9a-zA-Z])', r'\1/\2', t)
+
+    # 8. Operadores matemáticos a Unicode limpio
+    operators = [
+        (r'\\cdot', '·'),
+        (r'\\times', '·'),
+        (r'\\div', '÷'),
+        (r'\\pm', '±'),
+        (r'\\mp', '∓'),
+        (r'\\leq', '≤'),
+        (r'\\le', '≤'),
+        (r'\\geq', '≥'),
+        (r'\\ge', '≥'),
+        (r'\\neq', '≠'),
+        (r'\\ne', '≠'),
+        (r'\\approx', '≈'),
+        (r'\\equiv', '≡'),
+        (r'\\infty', '∞'),
+        (r'\\pi', 'π'),
+        (r'\\rightarrow', '→'),
+        (r'\\Rightarrow', '→'),
+        (r'\\to', '→'),
+        (r'\\leftarrow', '←'),
+        (r'\\Leftarrow', '←'),
+        (r'\\leftrightarrow', '↔'),
+        (r'\\Leftrightarrow', '↔'),
+        (r'\\alpha', 'α'),
+        (r'\\beta', 'β'),
+        (r'\\gamma', 'γ'),
+        (r'\\theta', 'θ'),
+        (r'\\Delta', 'Δ'),
+        (r'\\dots|\\cdots|\\ldots', '...'),
+        (r'\\in', '∈'),
+        (r'\\subset', '⊂'),
+        (r'\\cap', '∩'),
+        (r'\\cup', '∪'),
+    ]
+    for pattern, repl in operators:
+        t = re.sub(pattern + r'(?![a-zA-Z])', repl, t)
+
+    # 9. Espaciados y caracteres escapados de LaTeX
+    t = re.sub(r'\\qquad(?![a-zA-Z])', '    ', t)
+    t = re.sub(r'\\quad(?![a-zA-Z])', '  ', t)
+    t = re.sub(r'\\[,;:\s]', ' ', t)
+    t = re.sub(r'\\%', '%', t)
+    t = re.sub(r'\\\$', '$', t)
+    t = re.sub(r'\\&', '&', t)
+    t = re.sub(r'\\_', '_', t)
+    t = re.sub(r'\\\{', '{', t)
+    t = re.sub(r'\\\}', '}', t)
+
+    # 10. Eliminar delimitadores de fórmulas: $$, $, \[, \], \(, \)
+    t = re.sub(r'\$\$', '', t)
+    t = re.sub(r'\$', '', t)
+    t = re.sub(r'\\\[', '', t)
+    t = re.sub(r'\\\]', '', t)
+    t = re.sub(r'\\\(', '', t)
+    t = re.sub(r'\\\)', '', t)
+
+    # Limpiar llaves vacías o residuales
+    t = re.sub(r'\{\s*\}', '', t)
+
+    return t
+
 def _add_formatted_text(paragraph, text: str):
     """Procesa negritas (**texto**) y texto regular para párrafos de python-docx."""
-    clean_text = text.replace("$$", "").strip()
-    parts = re.split(r"(\*\*.*?\*\*)", clean_text)
+    parts = re.split(r"(\*\*.*?\*\*)", text)
     for part in parts:
         if part.startswith("**") and part.endswith("**") and len(part) >= 4:
             run = paragraph.add_run(part[2:-2])
@@ -37,9 +202,12 @@ def _add_formatted_text(paragraph, text: str):
             paragraph.add_run(part)
 
 def create_docx_from_markdown(markdown_text: str, title: str = "Prueba de Evaluación / Actividad de Aula", curso: str = "3º ESO") -> io.BytesIO:
-    """Convierte texto en formato Markdown a un documento Word (.docx) formal con cabecera de centro educativo."""
+    """Convierte texto en formato Markdown a un documento Word (.docx) formal con cabecera y fórmulas en Unicode limpio."""
     if Document is None:
         raise ImportError("La librería python-docx no está disponible. Asegúrate de incluirla en requirements.txt.")
+    
+    # Limpieza exhaustiva de sintaxis LaTeX previa para Word (manteniendo Markdown en pantalla)
+    texto_limpio = limpiar_latex_para_word(markdown_text)
     
     doc = Document()
     
@@ -92,8 +260,8 @@ def create_docx_from_markdown(markdown_text: str, title: str = "Prueba de Evalua
     r_line = p_line.add_run("—" * 60)
     r_line.font.color.rgb = RGBColor(148, 163, 184)
     
-    # Parsear y renderizar Markdown
-    lines = markdown_text.split("\n")
+    # Parsear y renderizar Markdown limpio
+    lines = texto_limpio.split("\n")
     for line in lines:
         stripped = line.strip()
         if not stripped:
