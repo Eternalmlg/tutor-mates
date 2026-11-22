@@ -75,8 +75,9 @@ Organizada en dos sub-pestañas:
   - *Altas Capacidades:* Retos deductivos, pensamiento lateral y generalización algebraica.
   - *Discalculia Leve:* Apoyo visual estructurado sin distractores aritméticos complejos.
 - **Tipografía Matemática LaTeX:** Fórmulas limpias renderizadas con `$ ... $` y `$$ ... $$`.
-- **Exportación a Microsoft Word (`.docx`) con Cabecera Formal:**
-  - Conversión automática de Markdown a `.docx` nativo en memoria (`io.BytesIO`).
+- **Exportación a Microsoft Word (`.docx`) con Ecuaciones Nativas (OMML):**
+  - Conversión profesional de Markdown a `.docx` nativo usando **Pandoc (`pypandoc`)** con la extensión `tex_math_dollars`.
+  - Todas las fórmulas LaTeX se transforman automáticamente en **ecuaciones editables de Microsoft Word (OMML)**, en lugar de texto plano o imágenes.
   - Cabecera oficial: *Departamento de Matemáticas*, Curso, Fecha, Grupo y espacio para *Nombre del alumno/a* y *Calificación*.
   - Persistencia en `st.session_state` para evitar que el contenido desaparezca al pulsar el botón de descarga.
 
@@ -101,8 +102,9 @@ Organizada en dos sub-pestañas:
 ```plaintext
 tutor-mates/
 ├── .gitignore             # Exclusión de credenciales y temporales
+├── packages.txt           # Paquetes del sistema operativo para Streamlit Cloud (pandoc)
 ├── README.md              # Documentación técnica, pedagógica y legal
-├── requirements.txt       # Dependencias del proyecto (streamlit, google-genai, pandas, pypdf, python-docx)
+├── requirements.txt       # Dependencias Python (streamlit, google-genai, pandas, pypdf, pypandoc)
 ├── clase_3eso.csv         # Registro anonimizado de 15 alumnos (DUA)
 ├── documentos_centro/     # Carpeta para depositar los reglamentos y planes de convivencia (PDF)
 └── app.py                 # Aplicación principal de Streamlit

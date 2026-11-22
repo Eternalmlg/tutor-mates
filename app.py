@@ -17,294 +17,70 @@ try:
 except ImportError:
     PdfReader = None
 
+import tempfile
+
 try:
-    from docx import Document
-    from docx.shared import Inches, Pt, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.enum.table import WD_TABLE_ALIGNMENT
+    import pypandoc
 except ImportError:
-    Document = None
+    pypandoc = None
 
-def limpiar_latex_para_word(texto: str) -> str:
+def create_docx_from_markdown(markdown_text: str, title: str = "Prueba de Evaluación / Actividad de Aula", curso: str = "3º ESO") -> bytes:
     """
-    Convierte expresiones y fórmulas matemáticas LaTeX en texto legible con caracteres Unicode,
-    limpiando delimitadores, fracciones, raíces, exponentes, subíndices y entornos de sistemas
-    para que se visualicen correctamente en documentos Word (.docx).
+    Convierte texto Markdown con fórmulas LaTeX a un documento Word (.docx) nativo
+    usando Pandoc (pypandoc). Todas las fórmulas LaTeX se convierten en ecuaciones
+    OMML nativas y editables de Microsoft Word.
     """
-    if not texto:
-        return ""
+    if pypandoc is None:
+        raise ImportError("La librería pypandoc no está disponible. Asegúrate de incluirla en requirements.txt y tener pandoc en packages.txt.")
 
-    t = texto
+    # 1. Cabecera formal de instituto en formato Markdown estructurado
+    cabecera_instituto = f"""| **DEPARTAMENTO DE MATEMÁTICAS** | **Curso:** {curso} |
+| :--- | :--- |
+| **{title.upper()}** | **Fecha:** __________________ |
+| **Nombre del alumno/a:** ____________________________________________________ | **Calificación:** _________ |
 
-    # 1. Limpieza de entornos de sistemas de ecuaciones (\begin{cases} ... \end{cases})
-    def _clean_cases(match):
-        content = match.group(1).strip()
-        raw_lines = re.split(r'\\\\|\n', content)
-        eqs = [re.sub(r'\s*&\s*', '  ', l).strip() for l in raw_lines if l.strip()]
-        if not eqs:
-            return ""
-        formatted = ["{ " + eqs[0]]
-        for eq in eqs[1:]:
-            formatted.append("  " + eq)
-        return "\n".join(formatted)
+---
 
-    t = re.sub(r'\\begin\{cases\}(.*?)\\end\{cases\}', _clean_cases, t, flags=re.DOTALL)
-    # Limpiar otros entornos residuales (\begin{aligned}, etc.)
-    t = re.sub(r'\\begin\{[a-zA-Z*]+\}(\[[^\]]*\])?(\{.*?\})?', '', t)
-    t = re.sub(r'\\end\{[a-zA-Z*]+\}', '', t)
+"""
 
-    # 2. Comandos de formato: \text{...}, \textbf{...}, \mathrm{...} dejando el contenido interior
-    for _ in range(3):
-        t = re.sub(r'\\(?:text|textbf|mathrm|mathbf|mathit)\{([^{}]*)\}', r'\1', t)
+    # 2. Normalización de fórmulas LaTeX para reconocimiento perfecto en Pandoc
+    t = markdown_text
 
-    # 3. Delimitadores elásticos \left y \right (conservando el paréntesis o corchete)
-    t = re.sub(r'\\left\.', '', t)
-    t = re.sub(r'\\right\.', '', t)
-    t = re.sub(r'\\left\s*\\\{', '{', t)
-    t = re.sub(r'\\right\s*\\\}', '}', t)
-    t = re.sub(r'\\left|\\right', '', t)
+    # Convertir delimitadores alternativos \[ ... \] a $$ ... $$ y \( ... \) a $ ... $
+    t = re.sub(r'\\\[(.*?)\\\]', r'$$\1$$', t, flags=re.DOTALL)
+    t = re.sub(r'\\\((.*?)\\\)', r'$\1$', t)
 
-    # 4. Símbolos de grado
-    t = re.sub(r'\^\{?\\circ\}?', '°', t)
+    # Limpiar espacios pegados dentro de $ ... $ en líneas simples (sin romper los bloques $$...$$)
+    # para que la extensión tex_math_dollars de Pandoc reconozca el 100% de las ecuaciones
+    def _trim_inline_dollar(match):
+        inner = match.group(1).strip()
+        return f"${inner}$"
 
-    # 5. Diccionarios y reemplazos para exponentes y subíndices a Unicode
-    sup_map = {
-        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-        '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
-        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
-        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ',
-        'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
-        'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ',
-        'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ',
-        'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ'
-    }
-    sub_map = {
-        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
-        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
-        '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
-        'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ',
-        'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ',
-        'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ',
-        'v': 'ᵥ', 'x': 'ₓ'
-    }
+    t = re.sub(r'(?<!\$)\$([^\$\n]+?)\$(?!\$)', _trim_inline_dollar, t)
 
-    # Exponentes: ^{...} y ^x
-    t = re.sub(r'\^\{([^}]+)\}', lambda m: "".join(sup_map.get(c, c) for c in m.group(1)), t)
-    t = re.sub(r'\^([0-9+\-a-zA-Z])', lambda m: sup_map.get(m.group(1), f"^{m.group(1)}"), t)
+    full_markdown = cabecera_instituto + t
 
-    # Subíndices: _{...} y _x
-    t = re.sub(r'_\{([^}]+)\}', lambda m: "".join(sub_map.get(c, c) for c in m.group(1)), t)
-    t = re.sub(r'_([0-9+\-a-zA-Z])', lambda m: sub_map.get(m.group(1), f"_{m.group(1)}"), t)
+    # 3. Conversión a .docx mediante archivo temporal
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+    temp_path = temp_file.name
+    temp_file.close()
 
-    # 6. Raíces cuadradas y enésimas: \sqrt{x} -> √(x), \sqrt[n]{x} -> ⁿ√(x)
-    def _clean_sqrt_n(m):
-        deg = m.group(1).strip()
-        deg_sup = "".join(sup_map.get(c, c) for c in deg)
-        return f"{deg_sup}√({m.group(2).strip()})"
-
-    t = re.sub(r'\\sqrt\[([^\]]+)\]\{([^{}]+)\}', _clean_sqrt_n, t)
-    for _ in range(5):
-        if r'\sqrt' not in t:
-            break
-        t = re.sub(r'\\sqrt\{([^{}]+)\}', r'√(\1)', t)
-    t = re.sub(r'\\sqrt\s*([0-9a-zA-Z])', r'√(\1)', t)
-
-    # 7. Fracciones: \frac{a}{b} -> a/b o (a)/(b)
-    def _clean_frac(m):
-        num = m.group(1).strip()
-        den = m.group(2).strip()
-        def needs_parens(s):
-            if not s:
-                return False
-            if s.startswith('(') and s.endswith(')'):
-                return False
-            return any(c in s for c in ['+', '-', ' '])
-        num_str = f"({num})" if needs_parens(num) else num
-        den_str = f"({den})" if needs_parens(den) else den
-        return f"{num_str}/{den_str}"
-
-    for _ in range(5):
-        if r'\frac' not in t and r'\dfrac' not in t:
-            break
-        t = re.sub(r'\\(?:d)?frac\{([^{}]+)\}\{([^{}]+)\}', _clean_frac, t)
-    t = re.sub(r'\\(?:d)?frac\s*([0-9a-zA-Z])\s*([0-9a-zA-Z])', r'\1/\2', t)
-
-    # 8. Operadores matemáticos a Unicode limpio
-    operators = [
-        (r'\\cdot', '·'),
-        (r'\\times', '·'),
-        (r'\\div', '÷'),
-        (r'\\pm', '±'),
-        (r'\\mp', '∓'),
-        (r'\\leq', '≤'),
-        (r'\\le', '≤'),
-        (r'\\geq', '≥'),
-        (r'\\ge', '≥'),
-        (r'\\neq', '≠'),
-        (r'\\ne', '≠'),
-        (r'\\approx', '≈'),
-        (r'\\equiv', '≡'),
-        (r'\\infty', '∞'),
-        (r'\\pi', 'π'),
-        (r'\\rightarrow', '→'),
-        (r'\\Rightarrow', '→'),
-        (r'\\to', '→'),
-        (r'\\leftarrow', '←'),
-        (r'\\Leftarrow', '←'),
-        (r'\\leftrightarrow', '↔'),
-        (r'\\Leftrightarrow', '↔'),
-        (r'\\alpha', 'α'),
-        (r'\\beta', 'β'),
-        (r'\\gamma', 'γ'),
-        (r'\\theta', 'θ'),
-        (r'\\Delta', 'Δ'),
-        (r'\\dots|\\cdots|\\ldots', '...'),
-        (r'\\in', '∈'),
-        (r'\\subset', '⊂'),
-        (r'\\cap', '∩'),
-        (r'\\cup', '∪'),
-    ]
-    for pattern, repl in operators:
-        t = re.sub(pattern + r'(?![a-zA-Z])', repl, t)
-
-    # 9. Espaciados y caracteres escapados de LaTeX
-    t = re.sub(r'\\qquad(?![a-zA-Z])', '    ', t)
-    t = re.sub(r'\\quad(?![a-zA-Z])', '  ', t)
-    t = re.sub(r'\\[,;:\s]', ' ', t)
-    t = re.sub(r'\\%', '%', t)
-    t = re.sub(r'\\\$', '$', t)
-    t = re.sub(r'\\&', '&', t)
-    t = re.sub(r'\\_', '_', t)
-    t = re.sub(r'\\\{', '{', t)
-    t = re.sub(r'\\\}', '}', t)
-
-    # 10. Eliminar delimitadores de fórmulas: $$, $, \[, \], \(, \)
-    t = re.sub(r'\$\$', '', t)
-    t = re.sub(r'\$', '', t)
-    t = re.sub(r'\\\[', '', t)
-    t = re.sub(r'\\\]', '', t)
-    t = re.sub(r'\\\(', '', t)
-    t = re.sub(r'\\\)', '', t)
-
-    # Limpiar llaves vacías o residuales
-    t = re.sub(r'\{\s*\}', '', t)
-
-    return t
-
-def _add_formatted_text(paragraph, text: str):
-    """Procesa negritas (**texto**) y texto regular para párrafos de python-docx."""
-    parts = re.split(r"(\*\*.*?\*\*)", text)
-    for part in parts:
-        if part.startswith("**") and part.endswith("**") and len(part) >= 4:
-            run = paragraph.add_run(part[2:-2])
-            run.bold = True
-        else:
-            paragraph.add_run(part)
-
-def create_docx_from_markdown(markdown_text: str, title: str = "Prueba de Evaluación / Actividad de Aula", curso: str = "3º ESO") -> io.BytesIO:
-    """Convierte texto en formato Markdown a un documento Word (.docx) formal con cabecera y fórmulas en Unicode limpio."""
-    if Document is None:
-        raise ImportError("La librería python-docx no está disponible. Asegúrate de incluirla en requirements.txt.")
-    
-    # Limpieza exhaustiva de sintaxis LaTeX previa para Word (manteniendo Markdown en pantalla)
-    texto_limpio = limpiar_latex_para_word(markdown_text)
-    
-    doc = Document()
-    
-    # Configurar márgenes de página (aprox 2 cm)
-    for section in doc.sections:
-        section.top_margin = Inches(0.8)
-        section.bottom_margin = Inches(0.8)
-        section.left_margin = Inches(0.8)
-        section.right_margin = Inches(0.8)
-        
-    # Cabecera formal de centro educativo
-    header_table = doc.add_table(rows=2, cols=2)
-    header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    header_table.autofit = False
-    
-    # Celda 0,0: Departamento y Título
-    cell_top_left = header_table.cell(0, 0)
-    p_dep = cell_top_left.paragraphs[0]
-    p_dep.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    r_dep = p_dep.add_run("DEPARTAMENTO DE MATEMÁTICAS\n")
-    r_dep.bold = True
-    r_dep.font.size = Pt(11)
-    r_dep.font.color.rgb = RGBColor(30, 64, 175)
-    
-    r_title = p_dep.add_run(f"{title.upper()}\n")
-    r_title.bold = True
-    r_title.font.size = Pt(12)
-    
-    # Celda 0,1: Curso y Metadatos
-    cell_top_right = header_table.cell(0, 1)
-    p_meta = cell_top_right.paragraphs[0]
-    p_meta.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    r_curso = p_meta.add_run(f"Curso: {curso}\nFecha: _______________\nGrupo: _________")
-    r_curso.font.size = Pt(10)
-    r_curso.font.color.rgb = RGBColor(71, 85, 105)
-    
-    # Fila 1 combinada: Datos del Alumno/a
-    cell_bottom = header_table.cell(1, 0)
-    cell_bottom.merge(header_table.cell(1, 1))
-    p_alum = cell_bottom.paragraphs[0]
-    p_alum.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    r_alum = p_alum.add_run("Nombre y Apellidos del alumno/a: ____________________________________________________  Calificación: ______")
-    r_alum.font.size = Pt(10)
-    r_alum.bold = True
-    
-    # Línea separadora
-    p_line = doc.add_paragraph()
-    p_line.paragraph_format.space_before = Pt(6)
-    p_line.paragraph_format.space_after = Pt(10)
-    r_line = p_line.add_run("—" * 60)
-    r_line.font.color.rgb = RGBColor(148, 163, 184)
-    
-    # Parsear y renderizar Markdown limpio
-    lines = texto_limpio.split("\n")
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-            
-        if stripped.startswith("### "):
-            h = doc.add_heading(level=3)
-            _add_formatted_text(h, stripped[4:])
-            h.paragraph_format.space_before = Pt(10)
-            h.paragraph_format.space_after = Pt(4)
-        elif stripped.startswith("## "):
-            h = doc.add_heading(level=2)
-            _add_formatted_text(h, stripped[3:])
-            h.paragraph_format.space_before = Pt(14)
-            h.paragraph_format.space_after = Pt(6)
-        elif stripped.startswith("# "):
-            h = doc.add_heading(level=1)
-            _add_formatted_text(h, stripped[2:])
-            h.paragraph_format.space_before = Pt(16)
-            h.paragraph_format.space_after = Pt(6)
-        elif stripped.startswith("- ") or stripped.startswith("* "):
-            p = doc.add_paragraph(style='List Bullet')
-            _add_formatted_text(p, stripped[2:])
-            p.paragraph_format.space_after = Pt(3)
-        elif re.match(r"^\d+\.\s+", stripped):
-            p = doc.add_paragraph(style='List Number')
-            content = re.sub(r"^\d+\.\s+", "", stripped)
-            _add_formatted_text(p, content)
-            p.paragraph_format.space_after = Pt(3)
-        elif stripped.startswith("---") or stripped.startswith("***"):
-            p = doc.add_paragraph()
-            r = p.add_run("—" * 50)
-            r.font.color.rgb = RGBColor(203, 213, 225)
-            p.paragraph_format.space_after = Pt(6)
-        else:
-            p = doc.add_paragraph()
-            _add_formatted_text(p, stripped)
-            p.paragraph_format.space_after = Pt(6)
-            
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
+    try:
+        pypandoc.convert_text(
+            full_markdown,
+            'docx',
+            format='markdown+tex_math_dollars',
+            outputfile=temp_path
+        )
+        with open(temp_path, "rb") as f:
+            docx_bytes = f.read()
+        return docx_bytes
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN DE PÁGINA
