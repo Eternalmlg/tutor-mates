@@ -755,17 +755,6 @@ with tab2:
             sesiones_efectivas = max(1, horas_totales - dias_perdidos)
             st.info(f"💡 **Sesiones lectivas netas de aula disponibles:** {sesiones_efectivas} sesiones (calculado restando {dias_perdidos} días no lectivos de {horas_totales} totales).")
             
-            enfoque_metodologico = st.multiselect(
-                "Metodologías clave a incorporar:",
-                [
-                    "Resolución cooperativa de problemas (Tutoría entre iguales)",
-                    "Pautas DUA (Andamiaje visual y enunciados graduados)",
-                    "Uso de GeoGebra o calculadoras como apoyo",
-                    "Gamificación corta / Rutinas de pensamiento (Ticket de salida)"
-                ],
-                default=["Resolución cooperativa de problemas (Tutoría entre iguales)", "Pautas DUA (Andamiaje visual y enunciados graduados)"]
-            )
-            
             btn_planificar = st.form_submit_button("🗓️ Generar Secuenciación Didáctica Completa", type="primary")
 
         if btn_planificar:
@@ -778,7 +767,6 @@ with tab2:
                 - Sesiones reales lectivas: {sesiones_efectivas} sesiones (ya se han descontado {dias_perdidos} festivos/días perdidos).
                 - Nivel del grupo: {nivel_grupo}
                 - Frecuencia semanal: {frecuencia}
-                - Enfoques pedagógicos seleccionados: {', '.join(enfoque_metodologico)}
                 
                 ESTRUCTURA OBLIGATORIA QUE DEBE TENER LA RESPUESTA:
                 1. **Tabla Resumen de la Unidad**: Objetivos competenciales clave y criterios de evaluación según currículo oficial de 3º ESO.
@@ -1057,12 +1045,7 @@ with tab3:
                 "Altas Capacidades (Retos de deducción, generalización algebraica, pensamiento lateral)",
                 "Discalculia Leve (Apoyo con esquemas, sin distractores aritméticos complejos)"
             ],
-            default=[
-                "Refuerzo / Nivel Inicial (Andamiaje, coeficientes enteros, números sencillos)",
-                "Estándar / Nivel Medio (Currículo ordinario 3º ESO)",
-                "TDAH (Enunciados breves, datos en negrita, tareas divididas en pasos)",
-                "Altas Capacidades (Retos de deducción, generalización algebraica, pensamiento lateral)"
-            ]
+            default=["Estándar / Nivel Medio (Currículo ordinario 3º ESO)"]
         )
         
     num_ejercicios = st.slider("Número de ejercicios por versión:", min_value=2, max_value=6, value=3)
@@ -1078,32 +1061,54 @@ with tab3:
             st.warning("Por favor, selecciona al menos un perfil de diversidad DUA.")
         else:
             with st.spinner("Generando ejercicios multinivel con tipografía LaTeX..."):
+                pautas_dict = {
+                    "Refuerzo / Nivel Inicial": "Problemas con coeficientes enteros pequeños, pasos guiados con andamiaje visual (\"Paso 1: Despeja la incógnita $x$...\"), sin fracciones complejas.",
+                    "Estándar / Nivel Medio": "Currículo ordinario de 3º de ESO con nivel de exigencia formal estándar y resolución autónoma.",
+                    "TDAH": "Enunciados sumamente concisos, palabras clave destacadas en **negrita**, sin texto accesorio de relleno, divididos en sub-apartados claros (a, b, c) para reducir la sobrecarga ejecutiva.",
+                    "Altas Capacidades": "Ejercicios no rutinarios de deducción lógica, pensamiento lateral, modelización algebraica no estándar o discusión en función de un parámetro.",
+                    "Discalculia Leve": "Reducción de la carga de memoria operativa numérica (números sencillos, apoyo visual estructurado), facilitando el planteamiento conceptual sin distractores aritméticos complejos."
+                }
+
+                nombres_perfiles_limpios = [p.split("(")[0].strip() for p in perfiles_seleccionados]
+                directrices_perfiles_prompt = "\n".join([
+                    f"   - **Versión {n}:** {pautas_dict.get(n, 'Adaptación conforme a pautas DUA.')}"
+                    for n in nombres_perfiles_limpios
+                ])
+                encabezados_esperados = "\n".join([f"   - `### Versión: {n}`" for n in nombres_perfiles_limpios])
+                lista_nombres_str = ", ".join([f"'{n}'" for n in nombres_perfiles_limpios])
+
                 prompt_dua = f"""
                 Actúa como diseñador didáctico de Matemáticas de Secundaria especialista en el Diseño Universal para el Aprendizaje (DUA).
-                Genera el siguiente material educativo:
+                Genera el siguiente material educativo adaptado:
                 
                 PARÁMETROS:
                 - Tema de Matemáticas: {tema_examen}
                 - Tipo de Instrumento: {tipo_prueba}
                 - Nivel: 3º de ESO (alumnos de 14-15 años en España)
-                - Número de ejercicios por perfil: {num_ejercicios}
-                - Perfiles solicitados: {', '.join(perfiles_seleccionados)}
+                - Número de ejercicios por versión: {num_ejercicios} ejercicios
+                - NÚMERO TOTAL DE VERSIONES A GENERAR: EXACTAMENTE {len(nombres_perfiles_limpios)} ({lista_nombres_str})
                 - Incluir soluciones: {'SÍ' if incluir_soluciones else 'NO'}
                 - Incluir rúbrica/criterios: {'SÍ' if incluir_rubrica else 'NO'}
                 
-                REGLAS DE FORMATO Y CONTENIDO (MUY ESTRICTO):
-                1. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones algebraicas utilizando notación LaTeX limpia:
+                REGLAS CRÍTICAS DE EXCLUSIVIDAD Y FORMATO (OBLIGATORIAS):
+                1. EXCLUSIVIDAD TOTAL DE VERSIONES (¡MUY IMPORTANTE!):
+                   - Debes generar versiones ÚNICA Y EXCLUSIVAMENTE para los {len(nombres_perfiles_limpios)} perfiles solicitados: {lista_nombres_str}.
+                   - ESTÁ TERMINANTEMENTE PROHIBIDO generar versiones para cualquier otro perfil DUA que no esté en la lista anterior. NO agregues versiones que el profesor no haya pedido.
+                   - Si el docente seleccionó 1 solo perfil, tu respuesta debe contener ÚNICAMENTE 1 versión. Si seleccionó 2, EXACTAMENTE 2 versiones.
+
+                2. PAUTAS DE ADAPTACIÓN (APLICAR SOLO A LAS VERSIONES SOLICITADAS):
+{directrices_perfiles_prompt}
+
+                3. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones algebraicas utilizando notación LaTeX limpia:
                    - Fórmulas en línea con un solo signo de dólar, ejemplo: $2x + y = 7$ o $x = \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}$.
                    - Fórmulas en bloque con doble dólar:
                      $$ \\begin{{cases}} 2x + 3y = 12 \\\\ x - y = 1 \\end{{cases}} $$
-                2. ADAPTACIÓN DUA REAL:
-                   - Versión Refuerzo: Problemas con coeficientes enteros pequeños, pasos guiados ("Paso 1: Despeja la incógnita $x$..."), sin fracciones complejas.
-                   - Versión TDAH: Enunciados sumamente concisos, palabras clave destacadas en **negrita**, sin texto de relleno accesorio, divididos en sub-apartados claros (a, b, c) para evitar la sobrecarga ejecutiva.
-                   - Versión Altas Capacidades: Ejercicios no repetitivos, que exijan análisis crítico, resolución de problemas no estándar, formulación de modelos algebraicos o discusión en función de un parámetro.
-                   - Versión Discalculia Leve: Reducción de la carga de memoria operativa numérica, facilitando el planteamiento conceptual.
-                3. ESTRUCTURA:
-                   - Organiza claramente cada versión bajo encabezados `### Versión: [Nombre del Perfil]`.
-                   - Al final, si está solicitado, incluye `### Solucionario Razonado Docente` y `### Criterios de Evaluación y Calificación`.
+
+                4. ESTRUCTURA DE LA RESPUESTA:
+                   - Incluye ÚNICAMENTE los siguientes encabezados de versión:
+{encabezados_esperados}
+                   - NO incluyas encabezados de versiones de perfiles que no fueron solicitados.
+                   - Al final, si está solicitado, incluye `### Solucionario Razonado Docente` (únicamente con las resoluciones de las versiones generadas arriba) y `### Criterios de Evaluación y Calificación`.
                 """
                 
                 system_instruction = "Eres un catedrático de Matemáticas de Secundaria y formador de profesorado en DUA. Tus salidas son pedagógicamente impecables y usan LaTeX matemáticamente riguroso."
