@@ -7,6 +7,7 @@ Cumplimiento estricto del RGPD (Datos Anónimos)
 import os
 import io
 import re
+import json
 import streamlit as st
 import pandas as pd
 from google import genai
@@ -81,6 +82,76 @@ def create_docx_from_markdown(markdown_text: str, title: str = "Prueba de Evalua
                 os.remove(temp_path)
             except Exception:
                 pass
+
+def create_revealjs_html(markdown_slides: str, tema: str = "Matemáticas", curso: str = "3º ESO") -> str:
+    """
+    Genera un archivo HTML interactivo y autocontenido con Reveal.js y KaTeX CDN,
+    permitiendo proyectar las diapositivas a pantalla completa con navegación por teclado
+    y fórmulas matemáticas LaTeX perfectamente renderizadas.
+    """
+    raw = markdown_slides
+    # Separar diapositivas por marcadores de diapositiva
+    if "<!-- SLIDE -->" in raw:
+        slide_chunks = [s.strip() for s in raw.split("<!-- SLIDE -->") if s.strip()]
+    elif "---SLIDE---" in raw:
+        slide_chunks = [s.strip() for s in raw.split("---SLIDE---") if s.strip()]
+    else:
+        slide_chunks = [s.strip() for s in re.split(r'\n---+\n', raw) if s.strip()]
+        
+    if not slide_chunks:
+        slide_chunks = [raw]
+        
+    sections_html = []
+    for chunk in slide_chunks:
+        safe_content = chunk.replace("</textarea>", "&lt;/textarea&gt;")
+        sections_html.append(f"""
+        <section data-markdown>
+            <textarea data-template>
+{safe_content}
+            </textarea>
+        </section>""")
+        
+    slides_body = "\n".join(sections_html)
+    
+    html_template = f"""<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Presentación: {tema} - {curso}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/league.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <style>
+        .reveal {{ font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; }}
+        .reveal h1, .reveal h2, .reveal h3 {{ text-transform: none; color: #38bdf8; }}
+        .reveal blockquote {{ background: rgba(30, 41, 59, 0.85); border-left: 5px solid #f59e0b; padding: 12px 18px; font-size: 0.65em; text-align: left; border-radius: 0 8px 8px 0; color: #e2e8f0; }}
+        .reveal pre code {{ font-size: 0.8em; }}
+        .reveal ul, .reveal ol {{ text-align: left; }}
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+{slides_body}
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/markdown/markdown.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/math/math.js"></script>
+    <script>
+        Reveal.initialize({{
+            controls: true,
+            progress: true,
+            center: true,
+            hash: true,
+            slideNumber: 'c/t',
+            plugins: [ RevealMarkdown, RevealMath.KaTeX ]
+        }});
+    </script>
+</body>
+</html>"""
+    return html_template
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN DE PÁGINA
@@ -341,6 +412,49 @@ def init_student_data():
 
 init_student_data()
 
+TUTORIAS_CSV_PATH = "profesores_tutorias.csv"
+
+def load_tutorias_data():
+    """Carga los horarios de tutoría docente desde CSV con fallback seguro."""
+    if os.path.exists(TUTORIAS_CSV_PATH):
+        try:
+            return pd.read_csv(TUTORIAS_CSV_PATH)
+        except Exception:
+            pass
+    # Fallback si no estuviese el archivo
+    data_tutorias = {
+        "Materia": [
+            "Matemáticas", "Lengua Castellana y Literatura", "Primera Lengua Extranjera (Inglés)",
+            "Física y Química", "Biología y Geología", "Geografía e Historia",
+            "Tecnología y Digitalización", "Educación Física", "Música",
+            "Educación Plástica y Visual", "Orientación Educativa"
+        ],
+        "Docente_Ficticio": [
+            "Prof. D. Martín (Dpto. Matemáticas)", "Profª. C. Navarro (Dpto. Lengua)", "Profª. S. Jenkins (Dpto. Inglés)",
+            "Prof. J. R. Morales (Dpto. FyQ)", "Profª. M. E. Vega (Dpto. ByG)", "Prof. A. Serrano (Dpto. Geografía)",
+            "Prof. P. Alarcón (Dpto. Tecnología)", "Profª. L. Gallego (Dpto. EF)", "Profª. R. Peña (Dpto. Música)",
+            "Prof. H. Soler (Dpto. Dibujo)", "Profª. V. Benítez (Orientadora)"
+        ],
+        "Dia_Semana": ["Martes", "Miércoles", "Jueves", "Lunes", "Viernes", "Martes", "Miércoles", "Jueves", "Viernes", "Lunes", "Miércoles"],
+        "Horario": [
+            "10:15 - 11:10", "11:40 - 12:35", "09:20 - 10:15", "12:35 - 13:30", "09:20 - 10:15",
+            "12:35 - 13:30", "08:25 - 09:20", "11:40 - 12:35", "10:15 - 11:10", "10:15 - 11:10", "10:15 - 11:10"
+        ],
+        "Despacho_Lugar": [
+            "Departamento de Matemáticas (Planta 1)", "Departamento de Lengua (Planta 1)", "Seminario de Idiomas (Planta 2)",
+            "Laboratorio de Química (Planta Baja)", "Laboratorio de Biología (Planta Baja)", "Departamento de CC. Sociales (Planta 2)",
+            "Taller de Tecnología (Semisótano)", "Pabellón Deportivo / Sala de Profesores EF", "Aula de Música (Planta 2)",
+            "Aula de Dibujo (Planta 2)", "Despacho de Orientación (Planta Baja)"
+        ],
+        "Canal_Cita": [
+            "Web del centro / Agenda escolar", "Web del centro / Raíces", "Web del centro / Agenda escolar",
+            "Web del centro / Correo institucional", "Web del centro / Agenda escolar", "Web del centro / Raíces",
+            "Web del centro / Agenda escolar", "Web del centro / Agenda escolar", "Web del centro / Correo institucional",
+            "Web del centro / Agenda escolar", "Cita previa Jefatura / Web del centro"
+        ]
+    }
+    return pd.DataFrame(data_tutorias)
+
 
 # -----------------------------------------------------------------------------
 # 5. BARRA LATERAL (SIDEBAR) DOCENTE
@@ -394,7 +508,7 @@ st.markdown("Herramienta docente privada para automatizar la gestión de aula, d
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📋 Pasar Lista y Burocracia",
     "📅 Planificación de Aula",
-    "🎯 Diseñador de Ejercicios y Exámenes DUA",
+    "🎯 Diseñador DUA y Materiales",
     "🤖 Asistente Docente con Contexto del Aula",
     "📜 Normativa y Plan de Convivencia"
 ])
@@ -404,305 +518,428 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # PESTAÑA 1: 📋 PASAR LISTA Y BUROCRACIA
 # =============================================================================
 with tab1:
-    st.header("📋 Registro de Asistencia y Gestión de Absentismo")
-    st.markdown("Control diario de asistencia y detección temprana de absentismo escolar conforme al protocolo educativo oficial.")
-    
-    # Alertas automáticas para faltas > 4
-    df_alertas = st.session_state["df_alumnos"][st.session_state["df_alumnos"]["Faltas_Acumuladas"] > 4]
-    
-    if not df_alertas.empty:
-        codigos_alerta = ", ".join([f"**{row['ID_Alumno']}** ({row['Faltas_Acumuladas']} faltas)" for _, row in df_alertas.iterrows()])
-        st.error(f"⚠️ **Alerta Protocolo Absentismo (>4 faltas acumuladas):** Se detectan {len(df_alertas)} alumno(s) en situación crítica de absentismo no justificado: {codigos_alerta}. Requiere comunicación inmediata a Jefatura de Estudios / Comisión de Absentismo.")
-    else:
-        st.success("✅ No hay ningún alumno que supere el umbral de alerta de absentismo (>4 faltas).")
-    
-    # Mini-Dashboard Estadístico del Aula
-    df_actual = st.session_state["df_alumnos"]
-    total_alumnos_dash = len(df_actual)
-    nota_media_grupo = float(df_actual["Nota_Media"].mean()) if total_alumnos_dash > 0 else 0.0
-    alumnos_riesgo = df_actual[(df_actual["Nota_Media"] < 5.0) | (df_actual["Faltas_Acumuladas"] > 4)]
-    num_riesgo = len(alumnos_riesgo)
-    pct_riesgo = (num_riesgo / total_alumnos_dash * 100) if total_alumnos_dash > 0 else 0.0
-    total_faltas_acum = int(df_actual["Faltas_Acumuladas"].sum())
+    st.header("📋 Pasar Lista y Burocracia de Aula")
+    st.markdown("Control diario de asistencia, detección temprana de absentismo y gestión de horarios de atención a familias.")
 
-    st.markdown("### 📊 Mini-Dashboard Estadístico del Aula")
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        st.metric(
-            label="Nota Media del Grupo",
-            value=f"{nota_media_grupo:.2f} / 10",
-            delta="Aprobado General" if nota_media_grupo >= 5.0 else "Alerta Rendimiento",
-            delta_color="normal" if nota_media_grupo >= 5.0 else "inverse"
+    subtab_asistencia, subtab_tutorias = st.tabs([
+        "📋 Control de Asistencia y Burocracia",
+        "🕒 Horario de Atención a Familias"
+    ])
+
+    with subtab_asistencia:
+        st.subheader("Registro de Asistencia y Gestión de Absentismo")
+        st.caption("Control diario de asistencia y detección temprana de absentismo escolar conforme al protocolo educativo oficial.")
+        
+        # Alertas automáticas para faltas > 4
+        df_alertas = st.session_state["df_alumnos"][st.session_state["df_alumnos"]["Faltas_Acumuladas"] > 4]
+        
+        if not df_alertas.empty:
+            codigos_alerta = ", ".join([f"**{row['ID_Alumno']}** ({row['Faltas_Acumuladas']} faltas)" for _, row in df_alertas.iterrows()])
+            st.error(f"⚠️ **Alerta Protocolo Absentismo (>4 faltas acumuladas):** Se detectan {len(df_alertas)} alumno(s) en situación crítica de absentismo no justificado: {codigos_alerta}. Requiere comunicación inmediata a Jefatura de Estudios / Comisión de Absentismo.")
+        else:
+            st.success("✅ No hay ningún alumno que supere el umbral de alerta de absentismo (>4 faltas).")
+        
+        # Mini-Dashboard Estadístico del Aula
+        df_actual = st.session_state["df_alumnos"]
+        total_alumnos_dash = len(df_actual)
+        nota_media_grupo = float(df_actual["Nota_Media"].mean()) if total_alumnos_dash > 0 else 0.0
+        alumnos_riesgo = df_actual[(df_actual["Nota_Media"] < 5.0) | (df_actual["Faltas_Acumuladas"] > 4)]
+        num_riesgo = len(alumnos_riesgo)
+        pct_riesgo = (num_riesgo / total_alumnos_dash * 100) if total_alumnos_dash > 0 else 0.0
+        total_faltas_acum = int(df_actual["Faltas_Acumuladas"].sum())
+
+        st.markdown("### 📊 Mini-Dashboard Estadístico del Aula")
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            st.metric(
+                label="Nota Media del Grupo",
+                value=f"{nota_media_grupo:.2f} / 10",
+                delta="Aprobado General" if nota_media_grupo >= 5.0 else "Alerta Rendimiento",
+                delta_color="normal" if nota_media_grupo >= 5.0 else "inverse"
+            )
+        with col_m2:
+            st.metric(
+                label="% Alumnos en Riesgo (Nota < 5 o > 4 faltas)",
+                value=f"{pct_riesgo:.1f}%",
+                delta=f"{num_riesgo} de {total_alumnos_dash} alumnos",
+                delta_color="inverse" if num_riesgo > 0 else "normal"
+            )
+        with col_m3:
+            st.metric(
+                label="Total Faltas Acumuladas",
+                value=f"{total_faltas_acum} faltas",
+                delta=f"Media: {total_faltas_acum/total_alumnos_dash:.1f} por alumno" if total_alumnos_dash > 0 else None,
+                delta_color="off"
+            )
+
+        # Gráficos visuales nativos de Streamlit: correlación absentismo y rendimiento
+        col_ch1, col_ch2 = st.columns([1, 1])
+        with col_ch1:
+            st.markdown("**📉 Correlación: Faltas Acumuladas vs. Nota Media**")
+            st.caption("Visualiza el impacto directo de las ausencias en las calificaciones por Perfil DUA.")
+            st.scatter_chart(
+                df_actual,
+                x="Faltas_Acumuladas",
+                y="Nota_Media",
+                color="Perfil_DUA",
+                height=260
+            )
+        with col_ch2:
+            st.markdown("**📊 Faltas Acumuladas por Código ALU_XX**")
+            st.caption("Comparativa individual frente al umbral crítico de absentismo (>4 faltas).")
+            df_faltas_chart = df_actual.set_index("ID_Alumno")[["Faltas_Acumuladas"]]
+            st.bar_chart(
+                df_faltas_chart,
+                color="#ef4444",
+                height=260
+            )
+
+        st.divider()
+        st.subheader("Tabla Interactiva de Clase (3º ESO)")
+        st.caption("Modifica la asistencia de hoy o las observaciones directamente en la tabla. Los cambios se reflejarán inmediatamente.")
+        
+        # Configuración de columnas del data editor
+        edited_df = st.data_editor(
+            st.session_state["df_alumnos"],
+            column_config={
+                "ID_Alumno": st.column_config.TextColumn("Código Alumno", disabled=True),
+                "Perfil_DUA": st.column_config.SelectboxColumn(
+                    "Perfil DUA",
+                    options=["Estándar", "Refuerzo_Calculo", "TDAH_Adaptacion", "Altas_Capacidades", "Discalculia_Leve"],
+                    required=True
+                ),
+                "Faltas_Acumuladas": st.column_config.NumberColumn("Faltas Totales", min_value=0, max_value=50, step=1),
+                "Nota_Media": st.column_config.NumberColumn("Nota Media", min_value=0.0, max_value=10.0, step=0.1, format="%.1f"),
+                "Asistencia_Hoy": st.column_config.CheckboxColumn("¿Asiste Hoy?", default=True),
+                "Observaciones_Docente": st.column_config.TextColumn("Observaciones Docente (Sin Nombres)", width="large")
+            },
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            key="editor_alumnos"
         )
-    with col_m2:
-        st.metric(
-            label="% Alumnos en Riesgo (Nota < 5 o > 4 faltas)",
-            value=f"{pct_riesgo:.1f}%",
-            delta=f"{num_riesgo} de {total_alumnos_dash} alumnos",
-            delta_color="inverse" if num_riesgo > 0 else "normal"
-        )
-    with col_m3:
-        st.metric(
-            label="Total Faltas Acumuladas",
-            value=f"{total_faltas_acum} faltas",
-            delta=f"Media: {total_faltas_acum/total_alumnos_dash:.1f} por alumno" if total_alumnos_dash > 0 else None,
-            delta_color="off"
+        
+        # Actualizar session state si hubo cambios
+        st.session_state["df_alumnos"] = edited_df
+
+        col_btn1, col_btn2 = st.columns([1, 1])
+        with col_btn1:
+            # Descarga del CSV actualizado
+            csv_data = edited_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="💾 Descargar Registro Actualizado (CSV)",
+                data=csv_data,
+                file_name="clase_3eso_actualizada.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with col_btn2:
+            if st.button("🔄 Marcar a todos como Presentes hoy", use_container_width=True):
+                st.session_state["df_alumnos"]["Asistencia_Hoy"] = True
+                st.rerun()
+
+        st.markdown("---")
+        st.subheader("📄 Generador Automático de Partes y Notificaciones Oficiales con IA")
+        st.markdown("Redacta borradores administrativos oficiales listos para enviar a Jefatura de Estudios o a las Familias, garantizando el anonimato del alumno mediante su código identificador.")
+        
+        col_dest, col_alu = st.columns([1, 1])
+        with col_dest:
+            destinatario = st.selectbox(
+                "Destinatario del documento oficial:",
+                ["Jefatura de Estudios / Comisión de Absentismo", "Familia / Tutores Legales (Tutoría Oficial)"]
+            )
+        with col_alu:
+            # Seleccionar preferentemente alumnos con alerta, o cualquiera de la lista
+            alumnos_options = edited_df["ID_Alumno"].tolist()
+            alumno_sel = st.selectbox("Selecciona el alumno por su código anónimo:", alumnos_options, index=1 if len(alumnos_options) > 1 else 0)
+
+        datos_alumno = edited_df[edited_df["ID_Alumno"] == alumno_sel].iloc[0]
+
+        if st.button("✨ Redactar Borrador con IA", type="primary"):
+            with st.spinner("Redactando comunicación formal bajo normativa educativa..."):
+                prompt_burocracia = f"""
+                Actúa como un profesor de Matemáticas y tutor de 3º de ESO en un Instituto de Educación Secundaria en España.
+                Redacta un documento formal de tipo: "{destinatario}".
+                
+                DATOS OFICIALES DEL ALUMNO (ESTRICTAMENTE ANONIMIZADOS BAJO RGPD):
+                - Código del Alumno: {datos_alumno['ID_Alumno']}
+                - Faltas de asistencia acumuladas: {datos_alumno['Faltas_Acumuladas']} faltas
+                - Asistencia en la sesión de hoy: {'Asistió' if datos_alumno['Asistencia_Hoy'] else 'Ausente'}
+                - Calificación media actual: {datos_alumno['Nota_Media']}/10
+                - Perfil de atención a la diversidad (DUA): {datos_alumno['Perfil_DUA']}
+                - Observaciones del cuaderno docente: {datos_alumno['Observaciones_Docente']}
+                
+                REGLAS CRÍTICAS DE REDACCIÓN:
+                1. En cumplimiento estricto del RGPD, utiliza ÚNICAMENTE el identificador '{datos_alumno['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
+                2. Tono riguroso, respetuoso, formal y pedagógico.
+                3. Menciona la preocupación por el impacto de las faltas reiteradas en la adquisición de las competencias matemáticas de 3º ESO.
+                4. Si el destinatario es Jefatura de Estudios, referencia el inicio del protocolo ordinario de absentismo escolar y solicitud de intervención del departamento de orientación.
+                5. Si el destinatario es la Familia, cita con delicadeza la importancia del acompañamiento familiar, la justificación documental de las ausencias y convoca a una entrevista presencial o telemática de tutoría.
+                6. Estructura con fecha simulada, asunto oficial, exposición de hechos objetivos y fórmula de despedida.
+                """
+                
+                system_instruction = "Eres un asistente docente experto en legislación educativa secundaria (LOMLOE), protocolos de absentismo escolar y redacción administrativa en España, cumpliendo estrictamente con el RGPD."
+                respuesta_borrador = call_gemini(prompt_burocracia, system_instruction)
+                
+                st.markdown("### 📋 Borrador Generado")
+                st.text_area("Copia el texto del documento:", value=respuesta_borrador, height=350)
+
+        st.markdown("---")
+        st.subheader("👨‍👩‍👧‍👦 Ficha Preparatoria para Entrevistas con Familias (Tutoría Oficial)")
+        st.markdown("Genera un informe sintético y conciso de todas las características del alumno/a, junto con una guía práctica de explicaciones para los padres y propuesta de compromisos mutuos.")
+
+        col_fam1, col_fam2 = st.columns([1, 1])
+        with col_fam1:
+            alumnos_lista = edited_df["ID_Alumno"].tolist()
+            def format_alumno_label(cod):
+                row = edited_df[edited_df["ID_Alumno"] == cod].iloc[0]
+                alerta = "⚠️ Alerta" if row["Faltas_Acumuladas"] > 4 or row["Nota_Media"] < 5.0 else "✅ Normal"
+                return f"{cod} — Nota: {row['Nota_Media']:.1f} | {row['Faltas_Acumuladas']} faltas | {row['Perfil_DUA']} ({alerta})"
+
+            alumno_fam_sel = st.selectbox(
+                "Selecciona el alumno/a para la entrevista de tutoría:",
+                alumnos_lista,
+                format_func=format_alumno_label,
+                key="sel_alumno_entrevista"
+            )
+            datos_fam = edited_df[edited_df["ID_Alumno"] == alumno_fam_sel].iloc[0]
+
+        with col_fam2:
+            motivo_entrevista = st.selectbox(
+                "Motivo principal o enfoque prioritario de la reunión:",
+                [
+                    "Seguimiento trimestral ordinario (Evolución global y hábitos)",
+                    "Preocupación por bajo rendimiento o riesgo de evaluación negativa",
+                    "Absentismo escolar reiterado o acumulación de faltas",
+                    "Dificultades de atención, organización o desmotivación en clase",
+                    "Atención a la diversidad / Adaptación DUA y pautas para el hogar",
+                    "Orientación académica y altas capacidades / motivación extra"
+                ],
+                key="sel_motivo_entrevista"
+            )
+
+        apuntes_tutor = st.text_input(
+            "Apuntes o hechos recientes observados por el docente (opcional):",
+            placeholder="Ej: Buena actitud cuando trabaja en equipo, pero le cuesta entregar tareas a tiempo y despista...",
+            key="input_apuntes_tutor"
         )
 
-    # Gráficos visuales nativos de Streamlit: correlación absentismo y rendimiento
-    col_ch1, col_ch2 = st.columns([1, 1])
-    with col_ch1:
-        st.markdown("**📉 Correlación: Faltas Acumuladas vs. Nota Media**")
-        st.caption("Visualiza el impacto directo de las ausencias en las calificaciones por Perfil DUA.")
-        st.scatter_chart(
-            df_actual,
-            x="Faltas_Acumuladas",
-            y="Nota_Media",
-            color="Perfil_DUA",
-            height=260
-        )
-    with col_ch2:
-        st.markdown("**📊 Faltas Acumuladas por Código ALU_XX**")
-        st.caption("Comparativa individual frente al umbral crítico de absentismo (>4 faltas).")
-        df_faltas_chart = df_actual.set_index("ID_Alumno")[["Faltas_Acumuladas"]]
-        st.bar_chart(
-            df_faltas_chart,
-            color="#ef4444",
-            height=260
-        )
+        # Métricas clave del alumno seleccionado
+        col_m_alu1, col_m_alu2, col_m_alu3, col_m_alu4 = st.columns(4)
+        with col_m_alu1:
+            st.metric("Código Alumno", datos_fam["ID_Alumno"])
+        with col_m_alu2:
+            st.metric(
+                "Nota Media",
+                f"{datos_fam['Nota_Media']:.1f} / 10",
+                delta="Aprobado" if datos_fam["Nota_Media"] >= 5.0 else "Suspenso",
+                delta_color="normal" if datos_fam["Nota_Media"] >= 5.0 else "inverse"
+            )
+        with col_m_alu3:
+            st.metric(
+                "Faltas Acumuladas",
+                f"{datos_fam['Faltas_Acumuladas']} faltas",
+                delta="Protocolo Absentismo" if datos_fam["Faltas_Acumuladas"] > 4 else "Bajo control",
+                delta_color="inverse" if datos_fam["Faltas_Acumuladas"] > 4 else "normal"
+            )
+        with col_m_alu4:
+            st.metric("Perfil DUA", datos_fam["Perfil_DUA"])
 
-    st.divider()
-    st.subheader("Tabla Interactiva de Clase (3º ESO)")
-    st.caption("Modifica la asistencia de hoy o las observaciones directamente en la tabla. Los cambios se reflejarán inmediatamente.")
-    
-    # Configuración de columnas del data editor
-    edited_df = st.data_editor(
-        st.session_state["df_alumnos"],
-        column_config={
-            "ID_Alumno": st.column_config.TextColumn("Código Alumno", disabled=True),
-            "Perfil_DUA": st.column_config.SelectboxColumn(
-                "Perfil DUA",
-                options=["Estándar", "Refuerzo_Calculo", "TDAH_Adaptacion", "Altas_Capacidades", "Discalculia_Leve"],
-                required=True
-            ),
-            "Faltas_Acumuladas": st.column_config.NumberColumn("Faltas Totales", min_value=0, max_value=50, step=1),
-            "Nota_Media": st.column_config.NumberColumn("Nota Media", min_value=0.0, max_value=10.0, step=0.1, format="%.1f"),
-            "Asistencia_Hoy": st.column_config.CheckboxColumn("¿Asiste Hoy?", default=True),
-            "Observaciones_Docente": st.column_config.TextColumn("Observaciones Docente (Sin Nombres)", width="large")
-        },
-        hide_index=True,
-        use_container_width=True,
-        num_rows="fixed",
-        key="editor_alumnos"
-    )
-    
-    # Actualizar session state si hubo cambios
-    st.session_state["df_alumnos"] = edited_df
+        if st.button("📋 Generar Ficha Completa para la Entrevista con Familias", type="primary", key="btn_generar_ficha_fam"):
+            with st.spinner("Sintetizando perfil del alumno y preparando argumentos y explicaciones para la familia..."):
+                prompt_ficha = f"""
+                Actúa como un profesor tutor experimentado de Matemáticas de 3º de ESO en España, especialista en orientación educativa y atención a la diversidad (DUA).
+                Genera una FICHA PREPARATORIA COMPLETA Y ESTRUCTURADA PARA UNA ENTREVISTA DE TUTORÍA CON LA FAMILIA DEL ALUMNO.
+                
+                DATOS OFICIALES DEL ALUMNO (RGPD ESTRICTO - IDENTIFICADO SOLO COMO {datos_fam['ID_Alumno']}):
+                - Código identificador: {datos_fam['ID_Alumno']}
+                - Calificación media actual: {datos_fam['Nota_Media']} / 10
+                - Faltas de asistencia acumuladas: {datos_fam['Faltas_Acumuladas']} faltas
+                - Perfil de atención a la diversidad (DUA): {datos_fam['Perfil_DUA']}
+                - Observaciones del cuaderno docente: {datos_fam['Observaciones_Docente']}
+                - Motivo principal de la reunión: {motivo_entrevista}
+                - Apuntes específicos aportados por el tutor: {apuntes_tutor if apuntes_tutor.strip() else 'Sin apuntes adicionales'}
 
-    col_btn1, col_btn2 = st.columns([1, 1])
-    with col_btn1:
-        # Descarga del CSV actualizado
-        csv_data = edited_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="💾 Descargar Registro Actualizado (CSV)",
-            data=csv_data,
-            file_name="clase_3eso_actualizada.csv",
-            mime="text/csv",
+                DIRECTRICES CRÍTICAS:
+                1. PRIVACIDAD RGPD: Usa EXCLUSIVAMENTE el código '{datos_fam['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
+                2. TONO Y ESTILO: Empático, constructivo, institucional y colaborativo. No uses un tono acusatorio; la familia debe percibir que el centro busca soluciones conjuntas.
+                3. TRADUCCIÓN PEDAGÓGICA CLARA: Convierte los tecnicismos (DUA, descriptores, competencias) en explicaciones sencillas y comprensibles para padres no docentes.
+
+                ESTRUCTURA OBLIGATORIA DE LA RESPUESTA EN MARKDOWN:
+
+                # 📋 FICHA PREPARATORIA DE ENTREVISTA CON FAMILIA — {datos_fam['ID_Alumno']}
+
+                ## 1. 📊 INFORME CONCISO DE CARACTERÍSTICAS DEL ALUMNO (Radiografía para el Docente)
+                - **Diagnóstico General:** Estado global del alumno en 3 líneas concisas (favorable, atención preventiva o intervención urgente).
+                - **Rendimiento Académico en Matemáticas:** Valoración cualitativa de su nota ({datos_fam['Nota_Media']}/10), señalando qué contenidos o competencias domina y en qué aspectos presenta mayores dificultades.
+                - **Asistencia y Puntualidad:** Análisis del impacto de sus {datos_fam['Faltas_Acumuladas']} faltas en el seguimiento de la materia.
+                - **Perfil DUA y Estilo de Aprendizaje:** Qué implicaciones prácticas tiene su perfil ({datos_fam['Perfil_DUA']}) y qué medidas metodológicas se aplican en el aula.
+                - **Observaciones de Aula:** Síntesis de las notas del cuaderno del profesor.
+
+                ## 2. 🗣️ GUÍA DE EXPLICACIONES PARA LOS PADRES (Traducción Pedagógica Cercana)
+                - **Apertura de la Reunión (Puntos Fuertes):** 2 o 3 fortalezas, cualidades o actitudes positivas del alumno/a que el tutor debe destacar al inicio para abrir la conversación en un clima de confianza.
+                - **Cómo explicar su nivel en Matemáticas:** Argumentos claros, serenos y sin tecnicismos para explicar a los padres cómo va su hijo/a, evitando alarmismos pero con total honestidad.
+                - **Cómo explicar su perfil DUA a la familia:** Pautas sencillas y desestigmatizantes para explicar cómo procesa la información y qué apoyos recibe en clase.
+                - **Actitud, convivencia y hábitos de trabajo:** Cómo transmitir observaciones sobre su constancia, autonomía, cuidado del material y relación con sus compañeros.
+
+                ## 3. 🤝 COMPROMISOS COMPARTIDOS (Pacto de Colaboración Familia - Centro)
+                - **Compromisos Concretos para la Familia en Casa:** 3 pautas realistas, medibles y viables para la familia (ej. horario fijo de 30 min sin pantallas, supervisión semanal de libreta/classroom, rutina de descanso).
+                - **Compromisos del Profesor/Tutor en el Aula:** 2 medidas concretas de seguimiento pedagógico que el docente se compromete a realizar (ej. supervisión de notas guiadas, apoyo entre iguales, comprobación semanal).
+
+                ## 4. ❓ PREGUNTAS ESTRATÉGICAS PARA INDAGAR CON LA FAMILIA
+                - 3 preguntas clave, abiertas y respetuosas para conocer mejor la dinámica del alumno en casa (hábitos de estudio, nivel de frustración ante las tareas, descanso nocturno y motivación).
+                """
+
+                system_instruction = "Eres un tutor y orientador de Educación Secundaria en España, experto en comunicación asertiva con familias, marco DUA y legislación educativa LOMLOE."
+                ficha_generada = call_gemini(prompt_ficha, system_instruction)
+                st.session_state["ultima_ficha_familia"] = ficha_generada
+                st.session_state["ultimo_alumno_ficha"] = datos_fam["ID_Alumno"]
+
+        if st.session_state.get("ultima_ficha_familia"):
+            st.markdown("---")
+            st.markdown("### 📄 Ficha de Entrevista Generada")
+            st.markdown(st.session_state["ultima_ficha_familia"])
+
+            col_exp1, col_exp2 = st.columns([1, 1])
+            with col_exp1:
+                try:
+                    docx_ficha = create_docx_from_markdown(
+                        st.session_state["ultima_ficha_familia"],
+                        title=f"Ficha Entrevista Familia - {st.session_state.get('ultimo_alumno_ficha', 'Alumno')}",
+                        curso="3º ESO"
+                    )
+                    st.download_button(
+                        label="⬇️ Descargar Ficha en Word (.docx)",
+                        data=docx_ficha,
+                        file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key="btn_descarga_docx_ficha"
+                    )
+                except Exception as e:
+                    st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
+            with col_exp2:
+                st.download_button(
+                    label="⬇️ Descargar Ficha en Texto (.txt)",
+                    data=st.session_state["ultima_ficha_familia"],
+                    file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="btn_descarga_txt_ficha"
+                )
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 2: 🕒 HORARIO DE ATENCIÓN A FAMILIAS
+    # -------------------------------------------------------------------------
+    with subtab_tutorias:
+        st.subheader("🕒 Horario de Atención a Familias del Equipo Docente (3º ESO)")
+        st.markdown("Consulta centralizada de los horarios de tutoría de las 11 materias del curso y redacción asistida de convocatorias oficiales a familias.")
+
+        df_tutorias = load_tutorias_data()
+
+        # Filtros limpios por Materia y Día
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            materias_disponibles = ["Todas las materias"] + sorted(df_tutorias["Materia"].unique().tolist())
+            materia_filtro = st.selectbox("Filtrar por Materia / Especialidad:", materias_disponibles, key="filtro_tutoria_materia")
+        with col_f2:
+            dias_disponibles = ["Todos los días", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+            dia_filtro = st.selectbox("Filtrar por Día de la semana:", dias_disponibles, key="filtro_tutoria_dia")
+
+        df_tutorias_filtrado = df_tutorias.copy()
+        if materia_filtro != "Todas las materias":
+            df_tutorias_filtrado = df_tutorias_filtrado[df_tutorias_filtrado["Materia"] == materia_filtro]
+        if dia_filtro != "Todos los días":
+            df_tutorias_filtrado = df_tutorias_filtrado[df_tutorias_filtrado["Dia_Semana"] == dia_filtro]
+
+        st.dataframe(
+            df_tutorias_filtrado,
+            column_config={
+                "Materia": st.column_config.TextColumn("Asignatura / Área", width="medium"),
+                "Docente_Ficticio": st.column_config.TextColumn("Docente Responsable", width="medium"),
+                "Dia_Semana": st.column_config.TextColumn("Día", width="small"),
+                "Horario": st.column_config.TextColumn("Franja Horaria", width="small"),
+                "Despacho_Lugar": st.column_config.TextColumn("Lugar / Despacho", width="medium"),
+                "Canal_Cita": st.column_config.TextColumn("Canal Oficial de Solicitud", width="medium")
+            },
+            hide_index=True,
             use_container_width=True
         )
-    with col_btn2:
-        if st.button("🔄 Marcar a todos como Presentes hoy", use_container_width=True):
-            st.session_state["df_alumnos"]["Asistencia_Hoy"] = True
-            st.rerun()
 
-    st.markdown("---")
-    st.subheader("📄 Generador Automático de Partes y Notificaciones Oficiales con IA")
-    st.markdown("Redacta borradores administrativos oficiales listos para enviar a Jefatura de Estudios o a las Familias, garantizando el anonimato del alumno mediante su código identificador.")
-    
-    col_dest, col_alu = st.columns([1, 1])
-    with col_dest:
-        destinatario = st.selectbox(
-            "Destinatario del documento oficial:",
-            ["Jefatura de Estudios / Comisión de Absentismo", "Familia / Tutores Legales (Tutoría Oficial)"]
-        )
-    with col_alu:
-        # Seleccionar preferentemente alumnos con alerta, o cualquiera de la lista
-        alumnos_options = edited_df["ID_Alumno"].tolist()
-        alumno_sel = st.selectbox("Selecciona el alumno por su código anónimo:", alumnos_options, index=1 if len(alumnos_options) > 1 else 0)
-
-    datos_alumno = edited_df[edited_df["ID_Alumno"] == alumno_sel].iloc[0]
-
-    if st.button("✨ Redactar Borrador con IA", type="primary"):
-        with st.spinner("Redactando comunicación formal bajo normativa educativa..."):
-            prompt_burocracia = f"""
-            Actúa como un profesor de Matemáticas y tutor de 3º de ESO en un Instituto de Educación Secundaria en España.
-            Redacta un documento formal de tipo: "{destinatario}".
-            
-            DATOS OFICIALES DEL ALUMNO (ESTRICTAMENTE ANONIMIZADOS BAJO RGPD):
-            - Código del Alumno: {datos_alumno['ID_Alumno']}
-            - Faltas de asistencia acumuladas: {datos_alumno['Faltas_Acumuladas']} faltas
-            - Asistencia en la sesión de hoy: {'Asistió' if datos_alumno['Asistencia_Hoy'] else 'Ausente'}
-            - Calificación media actual: {datos_alumno['Nota_Media']}/10
-            - Perfil de atención a la diversidad (DUA): {datos_alumno['Perfil_DUA']}
-            - Observaciones del cuaderno docente: {datos_alumno['Observaciones_Docente']}
-            
-            REGLAS CRÍTICAS DE REDACCIÓN:
-            1. En cumplimiento estricto del RGPD, utiliza ÚNICAMENTE el identificador '{datos_alumno['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
-            2. Tono riguroso, respetuoso, formal y pedagógico.
-            3. Menciona la preocupación por el impacto de las faltas reiteradas en la adquisición de las competencias matemáticas de 3º ESO.
-            4. Si el destinatario es Jefatura de Estudios, referencia el inicio del protocolo ordinario de absentismo escolar y solicitud de intervención del departamento de orientación.
-            5. Si el destinatario es la Familia, cita con delicadeza la importancia del acompañamiento familiar, la justificación documental de las ausencias y convoca a una entrevista presencial o telemática de tutoría.
-            6. Estructura con fecha simulada, asunto oficial, exposición de hechos objetivos y fórmula de despedida.
-            """
-            
-            system_instruction = "Eres un asistente docente experto en legislación educativa secundaria (LOMLOE), protocolos de absentismo escolar y redacción administrativa en España, cumpliendo estrictamente con el RGPD."
-            respuesta_borrador = call_gemini(prompt_burocracia, system_instruction)
-            
-            st.markdown("### 📋 Borrador Generado")
-            st.text_area("Copia el texto del documento:", value=respuesta_borrador, height=350)
-
-    st.markdown("---")
-    st.subheader("👨‍👩‍👧‍👦 Ficha Preparatoria para Entrevistas con Familias (Tutoría Oficial)")
-    st.markdown("Genera un informe sintético y conciso de todas las características del alumno/a, junto con una guía práctica de explicaciones para los padres y propuesta de compromisos mutuos.")
-
-    col_fam1, col_fam2 = st.columns([1, 1])
-    with col_fam1:
-        alumnos_lista = edited_df["ID_Alumno"].tolist()
-        def format_alumno_label(cod):
-            row = edited_df[edited_df["ID_Alumno"] == cod].iloc[0]
-            alerta = "⚠️ Alerta" if row["Faltas_Acumuladas"] > 4 or row["Nota_Media"] < 5.0 else "✅ Normal"
-            return f"{cod} — Nota: {row['Nota_Media']:.1f} | {row['Faltas_Acumuladas']} faltas | {row['Perfil_DUA']} ({alerta})"
-
-        alumno_fam_sel = st.selectbox(
-            "Selecciona el alumno/a para la entrevista de tutoría:",
-            alumnos_lista,
-            format_func=format_alumno_label,
-            key="sel_alumno_entrevista"
-        )
-        datos_fam = edited_df[edited_df["ID_Alumno"] == alumno_fam_sel].iloc[0]
-
-    with col_fam2:
-        motivo_entrevista = st.selectbox(
-            "Motivo principal o enfoque prioritario de la reunión:",
-            [
-                "Seguimiento trimestral ordinario (Evolución global y hábitos)",
-                "Preocupación por bajo rendimiento o riesgo de evaluación negativa",
-                "Absentismo escolar reiterado o acumulación de faltas",
-                "Dificultades de atención, organización o desmotivación en clase",
-                "Atención a la diversidad / Adaptación DUA y pautas para el hogar",
-                "Orientación académica y altas capacidades / motivación extra"
-            ],
-            key="sel_motivo_entrevista"
-        )
-
-    apuntes_tutor = st.text_input(
-        "Apuntes o hechos recientes observados por el docente (opcional):",
-        placeholder="Ej: Buena actitud cuando trabaja en equipo, pero le cuesta entregar tareas a tiempo y despista...",
-        key="input_apuntes_tutor"
-    )
-
-    # Métricas clave del alumno seleccionado
-    col_m_alu1, col_m_alu2, col_m_alu3, col_m_alu4 = st.columns(4)
-    with col_m_alu1:
-        st.metric("Código Alumno", datos_fam["ID_Alumno"])
-    with col_m_alu2:
-        st.metric(
-            "Nota Media",
-            f"{datos_fam['Nota_Media']:.1f} / 10",
-            delta="Aprobado" if datos_fam["Nota_Media"] >= 5.0 else "Suspenso",
-            delta_color="normal" if datos_fam["Nota_Media"] >= 5.0 else "inverse"
-        )
-    with col_m_alu3:
-        st.metric(
-            "Faltas Acumuladas",
-            f"{datos_fam['Faltas_Acumuladas']} faltas",
-            delta="Protocolo Absentismo" if datos_fam["Faltas_Acumuladas"] > 4 else "Bajo control",
-            delta_color="inverse" if datos_fam["Faltas_Acumuladas"] > 4 else "normal"
-        )
-    with col_m_alu4:
-        st.metric("Perfil DUA", datos_fam["Perfil_DUA"])
-
-    if st.button("📋 Generar Ficha Completa para la Entrevista con Familias", type="primary", key="btn_generar_ficha_fam"):
-        with st.spinner("Sintetizando perfil del alumno y preparando argumentos y explicaciones para la familia..."):
-            prompt_ficha = f"""
-            Actúa como un profesor tutor experimentado de Matemáticas de 3º de ESO en España, especialista en orientación educativa y atención a la diversidad (DUA).
-            Genera una FICHA PREPARATORIA COMPLETA Y ESTRUCTURADA PARA UNA ENTREVISTA DE TUTORÍA CON LA FAMILIA DEL ALUMNO.
-            
-            DATOS OFICIALES DEL ALUMNO (RGPD ESTRICTO - IDENTIFICADO SOLO COMO {datos_fam['ID_Alumno']}):
-            - Código identificador: {datos_fam['ID_Alumno']}
-            - Calificación media actual: {datos_fam['Nota_Media']} / 10
-            - Faltas de asistencia acumuladas: {datos_fam['Faltas_Acumuladas']} faltas
-            - Perfil de atención a la diversidad (DUA): {datos_fam['Perfil_DUA']}
-            - Observaciones del cuaderno docente: {datos_fam['Observaciones_Docente']}
-            - Motivo principal de la reunión: {motivo_entrevista}
-            - Apuntes específicos aportados por el tutor: {apuntes_tutor if apuntes_tutor.strip() else 'Sin apuntes adicionales'}
-
-            DIRECTRICES CRÍTICAS:
-            1. PRIVACIDAD RGPD: Usa EXCLUSIVAMENTE el código '{datos_fam['ID_Alumno']}'. NO inventes nombres ni apellidos reales.
-            2. TONO Y ESTILO: Empático, constructivo, institucional y colaborativo. No uses un tono acusatorio; la familia debe percibir que el centro busca soluciones conjuntas.
-            3. TRADUCCIÓN PEDAGÓGICA CLARA: Convierte los tecnicismos (DUA, descriptores, competencias) en explicaciones sencillas y comprensibles para padres no docentes.
-
-            ESTRUCTURA OBLIGATORIA DE LA RESPUESTA EN MARKDOWN:
-
-            # 📋 FICHA PREPARATORIA DE ENTREVISTA CON FAMILIA — {datos_fam['ID_Alumno']}
-
-            ## 1. 📊 INFORME CONCISO DE CARACTERÍSTICAS DEL ALUMNO (Radiografía para el Docente)
-            - **Diagnóstico General:** Estado global del alumno en 3 líneas concisas (favorable, atención preventiva o intervención urgente).
-            - **Rendimiento Académico en Matemáticas:** Valoración cualitativa de su nota ({datos_fam['Nota_Media']}/10), señalando qué contenidos o competencias domina y en qué aspectos presenta mayores dificultades.
-            - **Asistencia y Puntualidad:** Análisis del impacto de sus {datos_fam['Faltas_Acumuladas']} faltas en el seguimiento de la materia.
-            - **Perfil DUA y Estilo de Aprendizaje:** Qué implicaciones prácticas tiene su perfil ({datos_fam['Perfil_DUA']}) y qué medidas metodológicas se aplican en el aula.
-            - **Observaciones de Aula:** Síntesis de las notas del cuaderno del profesor.
-
-            ## 2. 🗣️ GUÍA DE EXPLICACIONES PARA LOS PADRES (Traducción Pedagógica Cercana)
-            - **Apertura de la Reunión (Puntos Fuertes):** 2 o 3 fortalezas, cualidades o actitudes positivas del alumno/a que el tutor debe destacar al inicio para abrir la conversación en un clima de confianza.
-            - **Cómo explicar su nivel en Matemáticas:** Argumentos claros, serenos y sin tecnicismos para explicar a los padres cómo va su hijo/a, evitando alarmismos pero con total honestidad.
-            - **Cómo explicar su perfil DUA a la familia:** Pautas sencillas y desestigmatizantes para explicar cómo procesa la información y qué apoyos recibe en clase.
-            - **Actitud, convivencia y hábitos de trabajo:** Cómo transmitir observaciones sobre su constancia, autonomía, cuidado del material y relación con sus compañeros.
-
-            ## 3. 🤝 COMPROMISOS COMPARTIDOS (Pacto de Colaboración Familia - Centro)
-            - **Compromisos Concretos para la Familia en Casa:** 3 pautas realistas, medibles y viables para la familia (ej. horario fijo de 30 min sin pantallas, supervisión semanal de libreta/classroom, rutina de descanso).
-            - **Compromisos del Profesor/Tutor en el Aula:** 2 medidas concretas de seguimiento pedagógico que el docente se compromete a realizar (ej. supervisión de notas guiadas, apoyo entre iguales, comprobación semanal).
-
-            ## 4. ❓ PREGUNTAS ESTRATÉGICAS PARA INDAGAR CON LA FAMILIA
-            - 3 preguntas clave, abiertas y respetuosas para conocer mejor la dinámica del alumno en casa (hábitos de estudio, nivel de frustración ante las tareas, descanso nocturno y motivación).
-            """
-
-            system_instruction = "Eres un tutor y orientador de Educación Secundaria en España, experto en comunicación asertiva con familias, marco DUA y legislación educativa LOMLOE."
-            ficha_generada = call_gemini(prompt_ficha, system_instruction)
-            st.session_state["ultima_ficha_familia"] = ficha_generada
-            st.session_state["ultimo_alumno_ficha"] = datos_fam["ID_Alumno"]
-
-    if st.session_state.get("ultima_ficha_familia"):
         st.markdown("---")
-        st.markdown("### 📄 Ficha de Entrevista Generada")
-        st.markdown(st.session_state["ultima_ficha_familia"])
+        st.subheader("✉️ Asistente de Citación Oficial a Familias con IA")
+        st.markdown("Redacta un mensaje formal, cordial y empático para convocar a los tutores legales del alumno a una reunión de tutoría, citando el horario exacto y el aula asignada.")
 
-        col_exp1, col_exp2 = st.columns([1, 1])
-        with col_exp1:
-            try:
-                docx_ficha = create_docx_from_markdown(
-                    st.session_state["ultima_ficha_familia"],
-                    title=f"Ficha Entrevista Familia - {st.session_state.get('ultimo_alumno_ficha', 'Alumno')}",
-                    curso="3º ESO"
-                )
-                st.download_button(
-                    label="⬇️ Descargar Ficha en Word (.docx)",
-                    data=docx_ficha,
-                    file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True,
-                    key="btn_descarga_docx_ficha"
-                )
-            except Exception as e:
-                st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
-        with col_exp2:
+        col_cit1, col_cit2 = st.columns(2)
+        with col_cit1:
+            prof_options = df_tutorias["Materia"].tolist()
+            materia_cita_sel = st.selectbox(
+                "Selecciona la Materia / Profesor que convoca la reunión:",
+                prof_options,
+                key="sel_materia_cita"
+            )
+            prof_info = df_tutorias[df_tutorias["Materia"] == materia_cita_sel].iloc[0]
+            st.info(f"📍 **Horario registrado:** {prof_info['Dia_Semana']} de {prof_info['Horario']} en {prof_info['Despacho_Lugar']} ({prof_info['Docente_Ficticio']}).")
+
+        with col_cit2:
+            alumnos_codigos = st.session_state["df_alumnos"]["ID_Alumno"].tolist()
+            alumno_cita_sel = st.selectbox(
+                "Selecciona el alumno por su código anónimo (RGPD):",
+                alumnos_codigos,
+                key="sel_alumno_cita"
+            )
+            datos_alu_cita = st.session_state["df_alumnos"][st.session_state["df_alumnos"]["ID_Alumno"] == alumno_cita_sel].iloc[0]
+            st.caption(f"Perfil: {datos_alu_cita['Perfil_DUA']} | Nota: {datos_alu_cita['Nota_Media']:.1f} | Faltas: {datos_alu_cita['Faltas_Acumuladas']}")
+
+        motivo_cita = st.text_input(
+            "Motivo o tema específico a tratar con la familia:",
+            value="Seguimiento de hábitos de trabajo, evolución académica y acuerdos de coordinación",
+            key="input_motivo_cita"
+        )
+
+        if st.button("✉️ Redactar Convocatoria a Familia", type="primary", key="btn_redactar_cita"):
+            with st.spinner("Redactando citación formal con los datos del horario institucional..."):
+                prompt_cita = f"""
+                Actúa como profesor de {prof_info['Materia']} y tutor de 3º de ESO en un centro educativo de Secundaria en España.
+                Redacta un mensaje formal, cercano y empático convocando a los tutores legales (familia) del alumno a una reunión de tutoría.
+
+                DATOS DEL PROFESOR Y HORARIO OFICIAL:
+                - Materia: {prof_info['Materia']}
+                - Docente: {prof_info['Docente_Ficticio']}
+                - Día de atención: {prof_info['Dia_Semana']}
+                - Horario de atención: {prof_info['Horario']}
+                - Lugar / Despacho: {prof_info['Despacho_Lugar']}
+                - Canal de confirmación: {prof_info['Canal_Cita']}
+
+                DATOS DEL ALUMNO (RGPD ESTRICTO):
+                - Código identificador: {datos_alu_cita['ID_Alumno']}
+                - Nota media: {datos_alu_cita['Nota_Media']}/10
+                - Faltas acumuladas: {datos_alu_cita['Faltas_Acumuladas']}
+                - Perfil de aprendizaje: {datos_alu_cita['Perfil_DUA']}
+                - Motivo de la reunión: {motivo_cita}
+
+                REGLAS OBLIGATORIAS:
+                1. RGPD ESTRICTO: Utiliza ÚNICAMENTE el código '{datos_alu_cita['ID_Alumno']}' para referirte al estudiante. NO inventes nombres ni apellidos reales.
+                2. Cita OBLIGATORIAMENTE el día exacto ({prof_info['Dia_Semana']}), la franja horaria ({prof_info['Horario']}) y la ubicación ({prof_info['Despacho_Lugar']}).
+                3. Tono cordial, respetuoso, empático y orientado a la colaboración mutua en beneficio del alumno.
+                4. Solicita a la familia que confirme su asistencia o proponga alternativa mediante el canal: {prof_info['Canal_Cita']}.
+                5. Incluye asunto formal, saludo protocolario, exposición motivada, detalles de la cita y fórmula de despedida docente.
+                """
+                system_instruction_cita = "Eres un docente de Secundaria en España experto en comunicación asertiva e institucional con familias y respeto escrupuloso del RGPD."
+                msg_cita = call_gemini(prompt_cita, system_instruction_cita)
+                st.session_state["ultimo_mensaje_cita"] = msg_cita
+
+        if st.session_state.get("ultimo_mensaje_cita"):
+            st.markdown("---")
+            st.markdown("### 📋 Borrador de Convocatoria Generado")
+            st.text_area("Copia el texto del mensaje:", value=st.session_state["ultimo_mensaje_cita"], height=280)
             st.download_button(
-                label="⬇️ Descargar Ficha en Texto (.txt)",
-                data=st.session_state["ultima_ficha_familia"],
-                file_name=f"ficha_entrevista_{st.session_state.get('ultimo_alumno_ficha', 'alu').lower()}.txt",
+                label="⬇️ Descargar Convocatoria (.txt)",
+                data=st.session_state["ultimo_mensaje_cita"],
+                file_name=f"convocatoria_tutoria_{alumno_cita_sel.lower()}.txt",
                 mime="text/plain",
                 use_container_width=True,
-                key="btn_descarga_txt_ficha"
+                key="btn_descarga_txt_cita"
             )
 
 
@@ -713,9 +950,10 @@ with tab2:
     st.header("📅 Planificación Curricular y Gestión de Aula")
     st.markdown("Herramientas para la secuenciación de unidades didácticas y resolución inmediata de sustituciones o guardias de aula.")
     
-    subtab_temario, subtab_guardia, subtab_reto = st.tabs([
+    subtab_temario, subtab_guardia, subtab_diapositivas, subtab_reto = st.tabs([
         "📅 Distribución de Horas y Temario",
         "🚨 Modo Guardia Express",
+        "🎞️ Diapositivas de Sesión",
         "🏆 Reto Matemático Semanal (Gamificación)"
     ])
     
@@ -877,7 +1115,117 @@ with tab2:
                 st.error(f"Error al exportar ficha a Word: {str(e)}")
 
     # -------------------------------------------------------------------------
-    # SUB-PESTAÑA 3: 🏆 RETO MATEMÁTICO SEMANAL (GAMIFICACIÓN)
+    # SUB-PESTAÑA 3: 🎞️ GENERADOR DE DIAPOSITIVAS DE SESIÓN
+    # -------------------------------------------------------------------------
+    with subtab_diapositivas:
+        st.subheader("🎞️ Generador de Diapositivas de Sesión Proyectables")
+        st.markdown("Genera presentaciones estructuradas para el aula con fórmulas en LaTeX nítidas, notas para el docente y descarga en **archivo HTML interactivo con Reveal.js y KaTeX** (listo para pantalla completa con la tecla 'F' y navegación con flechas).")
+
+        with st.form("form_diapositivas"):
+            col_d1, col_d2 = st.columns([2, 1])
+            with col_d1:
+                tema_slides = st.text_input("Tema o Contenido de la Sesión:", value="Resolución de Sistemas de Ecuaciones Lineales por Reducción", key="input_tema_slides")
+            with col_d2:
+                curso_slides = st.selectbox("Curso / Nivel:", ["3º ESO", "1º ESO", "2º ESO", "4º ESO", "1º Bachillerato"], index=0, key="sel_curso_slides")
+
+            col_d3, col_d4 = st.columns([1, 1])
+            with col_d3:
+                duracion_slides = st.selectbox("Duración de la sesión:", ["50 minutos (Sesión estándar)", "45 minutos", "55 minutos"], index=0, key="sel_duracion_slides")
+            with col_d4:
+                enfoque_slides = st.selectbox(
+                    "Enfoque pedagógico prioritario:",
+                    [
+                        "Teoría y Conceptos + Ejemplos Guiados Paso a Paso",
+                        "Práctica Activa, Dinámicas y Resolución de Problemas",
+                        "Repaso Comprensivo Pre-Examen y Desactivación de Errores"
+                    ],
+                    key="sel_enfoque_slides"
+                )
+
+            btn_generar_slides = st.form_submit_button("📽️ Generar Diapositivas de Clase", type="primary")
+
+        if btn_generar_slides:
+            with st.spinner("Diseñando 6-8 diapositivas pedagógicas con fórmulas LaTeX y notas de orador..."):
+                prompt_slides = f"""
+                Actúa como un profesor experto de Matemáticas de Secundaria en España con alta competencia en didáctica visual y tecnología educativa.
+                Diseña una PRESENTACIÓN DE SESIÓN DE AULA completa (entre 6 y 8 diapositivas) para una clase de {duracion_slides} en {curso_slides}.
+
+                PARÁMETROS:
+                - Curso: {curso_slides}
+                - Tema de la clase: {tema_slides}
+                - Duración: {duracion_slides}
+                - Enfoque pedagógico: {enfoque_slides}
+
+                ESTRUCTURA EXACTA DE LAS DIAPOSITIVAS (6 a 8 SLIDES):
+                1. Diapositiva 1: Portada, Título impactante y Objetivos de Aprendizaje de hoy (¿Qué sabremos hacer al terminar la hora?).
+                2. Diapositiva 2: Pregunta de Activación / Calentamiento (Reto visual o cálculo mental previo para conectar ideas).
+                3. Diapositiva 3: Concepto Clave y Fundamento Matemático (Explicación rigurosa con fórmulas en LaTeX).
+                4. Diapositiva 4: Ejemplo Modelo Resuelto Paso a Paso (Desglose minucioso con anotaciones claras en LaTeX).
+                5. Diapositiva 5: Práctica Guiada en el Aula (Ejercicio para resolver individualmente o en parejas durante 10 min).
+                6. Diapositiva 6: '¡Cuidado con la Trampa!' (Error típico más común entre el alumnado y cómo detectarlo/evitarlo).
+                7. Diapositiva 7: Cierre y Ticket de Salida (1 pregunta de comprobación rápida para evaluar la comprensión antes de salir).
+                (Opcional Diapositiva 8: Reto de ampliación / Curiosidad matemática para finalizar).
+
+                REGLAS CRÍTICAS DE FORMATO (OBLIGATORIAS):
+                1. SEPARADOR DE DIAPOSITIVAS: Separa CADA diapositiva con una línea que contenga EXACTAMENTE:
+                   `<!-- SLIDE -->`
+                2. FÓRMULAS LATEX: Escribe TODAS las fórmulas matemáticas usando sintaxis LaTeX limpia:
+                   - En línea: $...$ (ej. $3x + 2y = 12$)
+                   - En bloque: $$...$$ (ej. $$ \\begin{{cases}} x + y = 5 \\\\ 2x - y = 1 \\end{{cases}} $$)
+                3. NOTAS PARA EL DOCENTE: Al final de cada diapositiva, incluye un bloque de cita Markdown con las notas y preguntas que el profesor debe hacer en voz alta:
+                   `> 🎙️ **Notas del Profesor:** [Qué decir, tiempo sugerido y qué preguntar al aula]`
+                4. Usa viñetas claras, tipografía destacada y código limpio.
+                """
+
+                system_instruction_slides = "Eres un catedrático de Matemáticas de Secundaria y formador en competencia digital docente en España. Creas presentaciones de aula dinámicas, sintéticas y visualmente impecables."
+                slides_generadas = call_gemini(prompt_slides, system_instruction_slides)
+                st.session_state["ultimas_diapositivas_raw"] = slides_generadas
+                st.session_state["ultimo_tema_slides"] = tema_slides
+                st.session_state["ultimo_curso_slides"] = curso_slides
+
+        if st.session_state.get("ultimas_diapositivas_raw"):
+            st.markdown("---")
+            st.markdown("### 📽️ Vista Previa de las Diapositivas")
+            
+            raw_slides = st.session_state["ultimas_diapositivas_raw"]
+            slides_list = [s.strip() for s in raw_slides.split("<!-- SLIDE -->") if s.strip()]
+            
+            for idx, slide_md in enumerate(slides_list):
+                with st.container():
+                    st.markdown(f"#### 🏷️ Diapositiva {idx + 1} de {len(slides_list)}")
+                    st.markdown(slide_md)
+                    st.divider()
+
+            # Generar HTML con Reveal.js + KaTeX
+            html_content = create_revealjs_html(
+                st.session_state["ultimas_diapositivas_raw"],
+                tema=st.session_state.get("ultimo_tema_slides", "Matemáticas"),
+                curso=st.session_state.get("ultimo_curso_slides", "3º ESO")
+            )
+
+            col_down_s1, col_down_s2 = st.columns([1, 1])
+            with col_down_s1:
+                st.download_button(
+                    label="📽️ Descargar Presentación Reveal.js (.html)",
+                    data=html_content.encode("utf-8"),
+                    file_name=f"presentacion_{st.session_state.get('ultimo_tema_slides', 'clase').lower().replace(' ', '_')[:25]}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="btn_descarga_html_slides"
+                )
+            with col_down_s2:
+                st.download_button(
+                    label="📄 Descargar Guion de Diapositivas (.txt)",
+                    data=st.session_state["ultimas_diapositivas_raw"],
+                    file_name=f"guion_diapositivas_{st.session_state.get('ultimo_tema_slides', 'clase').lower().replace(' ', '_')[:25]}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="btn_descarga_txt_slides"
+                )
+            st.info("💡 **Cómo proyectar:** Abre el archivo `.html` descargado en Chrome, Edge o Firefox. Pulsa la tecla **F** para activar la pantalla completa y usa las **flechas del teclado** para avanzar diapositivas.")
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 4: 🏆 RETO MATEMÁTICO SEMANAL (GAMIFICACIÓN)
     # -------------------------------------------------------------------------
     with subtab_reto:
         st.subheader("🏆 Reto Matemático Semanal / Escape Room de Aula")
@@ -1021,123 +1369,408 @@ with tab2:
 # PESTAÑA 3: 🎯 DISEÑADOR DE EJERCICIOS Y EXÁMENES DUA
 # =============================================================================
 with tab3:
-    st.header("🎯 Diseñador de Pruebas y Tareas Multinivel DUA")
-    st.markdown("Genera actividades de aula o exámenes adaptados a la diversidad de 3º de ESO, con fórmulas en formato LaTeX limpio y rúbricas de corrección docente.")
-    
-    col_dua1, col_dua2 = st.columns([1, 1])
-    with col_dua1:
-        tema_examen = st.text_input("Contenido matemático específico:", value="Sistemas de dos ecuaciones lineales con dos incógnitas")
-        tipo_prueba = st.selectbox(
-            "Tipo de instrumento de evaluación:",
-            [
-                "Prueba Escrita Formal (Examen Parcial o Trimestral)",
-                "Hoja de Ejercicios Prácticos para el Aula (Trabajo por Estaciones)",
-                "Prueba Competencial Basada en Situaciones Cotidianas"
-            ]
-        )
-    with col_dua2:
-        perfiles_seleccionados = st.multiselect(
-            "Selecciona los perfiles DUA para los que generar versiones adaptadas:",
-            [
-                "Refuerzo / Nivel Inicial (Andamiaje, coeficientes enteros, números sencillos)",
-                "Estándar / Nivel Medio (Currículo ordinario 3º ESO)",
-                "TDAH (Enunciados breves, datos en negrita, tareas divididas en pasos)",
-                "Altas Capacidades (Retos de deducción, generalización algebraica, pensamiento lateral)",
-                "Discalculia Leve (Apoyo con esquemas, sin distractores aritméticos complejos)"
-            ],
-            default=["Estándar / Nivel Medio (Currículo ordinario 3º ESO)"]
-        )
+    st.header("🎯 Diseñador DUA y Materiales Didácticos")
+    st.markdown("Generación de actividades adaptadas a la diversidad, agrupamientos cooperativos equilibrados y cuestionarios gamificados interactivos.")
+
+    subtab_dua, subtab_grupos, subtab_kahoot = st.tabs([
+        "🎯 Pruebas y Tareas DUA",
+        "👥 Grupos Cooperativos",
+        "🎮 Kahoots / Quizizz"
+    ])
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 1: 🎯 PRUEBAS Y TAREAS MULTINIVEL DUA
+    # -------------------------------------------------------------------------
+    with subtab_dua:
+        st.subheader("Generador de Pruebas y Tareas Multinivel DUA")
+        st.caption("Genera actividades de aula o exámenes adaptados a la diversidad de 3º de ESO, con fórmulas en formato LaTeX limpio y rúbricas de corrección docente.")
         
-    num_ejercicios = st.slider("Número de ejercicios por versión:", min_value=2, max_value=6, value=3)
-    
-    col_c1, col_c2 = st.columns(2)
-    with col_c1:
-        incluir_soluciones = st.checkbox("Incluir resoluciones completas paso a paso (Uso exclusivo docente)", value=True)
-    with col_c2:
-        incluir_rubrica = st.checkbox("Incluir criterios de calificación y baremo de puntuación", value=True)
+        col_dua1, col_dua2 = st.columns([1, 1])
+        with col_dua1:
+            tema_examen = st.text_input("Contenido matemático específico:", value="Sistemas de dos ecuaciones lineales con dos incógnitas")
+            tipo_prueba = st.selectbox(
+                "Tipo de instrumento de evaluación:",
+                [
+                    "Prueba Escrita Formal (Examen Parcial o Trimestral)",
+                    "Hoja de Ejercicios Prácticos para el Aula (Trabajo por Estaciones)",
+                    "Prueba Competencial Basada en Situaciones Cotidianas"
+                ]
+            )
+        with col_dua2:
+            perfiles_seleccionados = st.multiselect(
+                "Selecciona los perfiles DUA para los que generar versiones adaptadas:",
+                [
+                    "Refuerzo / Nivel Inicial (Andamiaje, coeficientes enteros, números sencillos)",
+                    "Estándar / Nivel Medio (Currículo ordinario 3º ESO)",
+                    "TDAH (Enunciados breves, datos en negrita, tareas divididas en pasos)",
+                    "Altas Capacidades (Retos de deducción, generalización algebraica, pensamiento lateral)",
+                    "Discalculia Leve (Apoyo con esquemas, sin distractores aritméticos complejos)"
+                ],
+                default=["Estándar / Nivel Medio (Currículo ordinario 3º ESO)"]
+            )
+            
+        num_ejercicios = st.slider("Número de ejercicios por versión:", min_value=2, max_value=6, value=3)
         
-    if st.button("🚀 Generar Material Adaptado DUA con LaTeX", type="primary"):
-        if not perfiles_seleccionados:
-            st.warning("Por favor, selecciona al menos un perfil de diversidad DUA.")
-        else:
-            with st.spinner("Generando ejercicios multinivel con tipografía LaTeX..."):
-                pautas_dict = {
-                    "Refuerzo / Nivel Inicial": "Problemas con coeficientes enteros pequeños, pasos guiados con andamiaje visual (\"Paso 1: Despeja la incógnita $x$...\"), sin fracciones complejas.",
-                    "Estándar / Nivel Medio": "Currículo ordinario de 3º de ESO con nivel de exigencia formal estándar y resolución autónoma.",
-                    "TDAH": "Enunciados sumamente concisos, palabras clave destacadas en **negrita**, sin texto accesorio de relleno, divididos en sub-apartados claros (a, b, c) para reducir la sobrecarga ejecutiva.",
-                    "Altas Capacidades": "Ejercicios no rutinarios de deducción lógica, pensamiento lateral, modelización algebraica no estándar o discusión en función de un parámetro.",
-                    "Discalculia Leve": "Reducción de la carga de memoria operativa numérica (números sencillos, apoyo visual estructurado), facilitando el planteamiento conceptual sin distractores aritméticos complejos."
-                }
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            incluir_soluciones = st.checkbox("Incluir resoluciones completas paso a paso (Uso exclusivo docente)", value=True)
+        with col_c2:
+            incluir_rubrica = st.checkbox("Incluir criterios de calificación y baremo de puntuación", value=True)
+            
+        if st.button("🚀 Generar Material Adaptado DUA con LaTeX", type="primary"):
+            if not perfiles_seleccionados:
+                st.warning("Por favor, selecciona al menos un perfil de diversidad DUA.")
+            else:
+                with st.spinner("Generando ejercicios multinivel con tipografía LaTeX..."):
+                    pautas_dict = {
+                        "Refuerzo / Nivel Inicial": "Problemas con coeficientes enteros pequeños, pasos guiados con andamiaje visual (\"Paso 1: Despeja la incógnita $x$...\"), sin fracciones complejas.",
+                        "Estándar / Nivel Medio": "Currículo ordinario de 3º de ESO con nivel de exigencia formal estándar y resolución autónoma.",
+                        "TDAH": "Enunciados sumamente concisos, palabras clave destacadas en **negrita**, sin texto accesorio de relleno, divididos en sub-apartados claros (a, b, c) para reducir la sobrecarga ejecutiva.",
+                        "Altas Capacidades": "Ejercicios no rutinarios de deducción lógica, pensamiento lateral, modelización algebraica no estándar o discusión en función de un parámetro.",
+                        "Discalculia Leve": "Reducción de la carga de memoria operativa numérica (números sencillos, apoyo visual estructurado), facilitando el planteamiento conceptual sin distractores aritméticos complejos."
+                    }
 
-                nombres_perfiles_limpios = [p.split("(")[0].strip() for p in perfiles_seleccionados]
-                directrices_perfiles_prompt = "\n".join([
-                    f"   - **Versión {n}:** {pautas_dict.get(n, 'Adaptación conforme a pautas DUA.')}"
-                    for n in nombres_perfiles_limpios
-                ])
-                encabezados_esperados = "\n".join([f"   - `### Versión: {n}`" for n in nombres_perfiles_limpios])
-                lista_nombres_str = ", ".join([f"'{n}'" for n in nombres_perfiles_limpios])
+                    nombres_perfiles_limpios = [p.split("(")[0].strip() for p in perfiles_seleccionados]
+                    directrices_perfiles_prompt = "\n".join([
+                        f"   - **Versión {n}:** {pautas_dict.get(n, 'Adaptación conforme a pautas DUA.')}"
+                        for n in nombres_perfiles_limpios
+                    ])
+                    encabezados_esperados = "\n".join([f"   - `### Versión: {n}`" for n in nombres_perfiles_limpios])
+                    lista_nombres_str = ", ".join([f"'{n}'" for n in nombres_perfiles_limpios])
 
-                prompt_dua = f"""
-                Actúa como diseñador didáctico de Matemáticas de Secundaria especialista en el Diseño Universal para el Aprendizaje (DUA).
-                Genera el siguiente material educativo adaptado:
-                
-                PARÁMETROS:
-                - Tema de Matemáticas: {tema_examen}
-                - Tipo de Instrumento: {tipo_prueba}
-                - Nivel: 3º de ESO (alumnos de 14-15 años en España)
-                - Número de ejercicios por versión: {num_ejercicios} ejercicios
-                - NÚMERO TOTAL DE VERSIONES A GENERAR: EXACTAMENTE {len(nombres_perfiles_limpios)} ({lista_nombres_str})
-                - Incluir soluciones: {'SÍ' if incluir_soluciones else 'NO'}
-                - Incluir rúbrica/criterios: {'SÍ' if incluir_rubrica else 'NO'}
-                
-                REGLAS CRÍTICAS DE EXCLUSIVIDAD Y FORMATO (OBLIGATORIAS):
-                1. EXCLUSIVIDAD TOTAL DE VERSIONES (¡MUY IMPORTANTE!):
-                   - Debes generar versiones ÚNICA Y EXCLUSIVAMENTE para los {len(nombres_perfiles_limpios)} perfiles solicitados: {lista_nombres_str}.
-                   - ESTÁ TERMINANTEMENTE PROHIBIDO generar versiones para cualquier otro perfil DUA que no esté en la lista anterior. NO agregues versiones que el profesor no haya pedido.
-                   - Si el docente seleccionó 1 solo perfil, tu respuesta debe contener ÚNICAMENTE 1 versión. Si seleccionó 2, EXACTAMENTE 2 versiones.
+                    prompt_dua = f"""
+                    Actúa como diseñador didáctico de Matemáticas de Secundaria especialista en el Diseño Universal para el Aprendizaje (DUA).
+                    Genera el siguiente material educativo adaptado:
+                    
+                    PARÁMETROS:
+                    - Tema de Matemáticas: {tema_examen}
+                    - Tipo de Instrumento: {tipo_prueba}
+                    - Nivel: 3º de ESO (alumnos de 14-15 años en España)
+                    - Número de ejercicios por versión: {num_ejercicios} ejercicios
+                    - NÚMERO TOTAL DE VERSIONES A GENERAR: EXACTAMENTE {len(nombres_perfiles_limpios)} ({lista_nombres_str})
+                    - Incluir soluciones: {'SÍ' if incluir_soluciones else 'NO'}
+                    - Incluir rúbrica/criterios: {'SÍ' if incluir_rubrica else 'NO'}
+                    
+                    REGLAS CRÍTICAS DE EXCLUSIVIDAD Y FORMATO (OBLIGATORIAS):
+                    1. EXCLUSIVIDAD TOTAL DE VERSIONES (¡MUY IMPORTANTE!):
+                       - Debes generar versiones ÚNICA Y EXCLUSIVAMENTE para los {len(nombres_perfiles_limpios)} perfiles solicitados: {lista_nombres_str}.
+                       - ESTÁ TERMINANTEMENTE PROHIBIDO generar versiones para cualquier otro perfil DUA que no esté en la lista anterior. NO agregues versiones que el profesor no haya pedido.
+                       - Si el docente seleccionó 1 solo perfil, tu respuesta debe contener ÚNICAMENTE 1 versión. Si seleccionó 2, EXACTAMENTE 2 versiones.
 
-                2. PAUTAS DE ADAPTACIÓN (APLICAR SOLO A LAS VERSIONES SOLICITADAS):
+                    2. PAUTAS DE ADAPTACIÓN (APLICAR SOLO A LAS VERSIONES SOLICITADAS):
 {directrices_perfiles_prompt}
 
-                3. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones algebraicas utilizando notación LaTeX limpia:
-                   - Fórmulas en línea con un solo signo de dólar, ejemplo: $2x + y = 7$ o $x = \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}$.
-                   - Fórmulas en bloque con doble dólar:
-                     $$ \\begin{{cases}} 2x + 3y = 12 \\\\ x - y = 1 \\end{{cases}} $$
+                    3. FORMATO LATEX: Escribe TODAS las fórmulas matemáticas y expresiones algebraicas utilizando notación LaTeX limpia:
+                       - Fórmulas en línea con un solo signo de dólar, ejemplo: $2x + y = 7$ o $x = \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}$.
+                       - Fórmulas en bloque con doble dólar:
+                         $$ \\begin{{cases}} 2x + 3y = 12 \\\\ x - y = 1 \\end{{cases}} $$
 
-                4. ESTRUCTURA DE LA RESPUESTA:
-                   - Incluye ÚNICAMENTE los siguientes encabezados de versión:
+                    4. ESTRUCTURA DE LA RESPUESTA:
+                       - Incluye ÚNICAMENTE los siguientes encabezados de versión:
 {encabezados_esperados}
-                   - NO incluyas encabezados de versiones de perfiles que no fueron solicitados.
-                   - Al final, si está solicitado, incluye `### Solucionario Razonado Docente` (únicamente con las resoluciones de las versiones generadas arriba) y `### Criterios de Evaluación y Calificación`.
-                """
-                
-                system_instruction = "Eres un catedrático de Matemáticas de Secundaria y formador de profesorado en DUA. Tus salidas son pedagógicamente impecables y usan LaTeX matemáticamente riguroso."
-                material_dua = call_gemini(prompt_dua, system_instruction)
-                st.session_state["ultimo_material_dua"] = material_dua
-                st.session_state["ultimo_tema_dua"] = tema_examen
+                       - NO incluyas encabezados de versiones de perfiles que no fueron solicitados.
+                       - Al final, si está solicitado, incluye `### Solucionario Razonado Docente` (únicamente con las resoluciones de las versiones generadas arriba) y `### Criterios de Evaluación y Calificación`.
+                    """
+                    
+                    system_instruction = "Eres un catedrático de Matemáticas de Secundaria y formador de profesorado en DUA. Tus salidas son pedagógicamente impecables y usan LaTeX matemáticamente riguroso."
+                    material_dua = call_gemini(prompt_dua, system_instruction)
+                    st.session_state["ultimo_material_dua"] = material_dua
+                    st.session_state["ultimo_tema_dua"] = tema_examen
 
-    if st.session_state.get("ultimo_material_dua"):
-        st.markdown("---")
-        st.markdown("### 📋 Material DUA Generado")
-        st.markdown(st.session_state["ultimo_material_dua"])
-        
-        # Botón de Descarga en Word (.docx) con cabecera formal
-        try:
-            docx_dua_file = create_docx_from_markdown(
-                st.session_state["ultimo_material_dua"],
-                title=f"Prueba / Actividades DUA - {st.session_state.get('ultimo_tema_dua', 'Matemáticas')}",
-                curso="3º ESO"
+        if st.session_state.get("ultimo_material_dua"):
+            st.markdown("---")
+            st.markdown("### 📋 Material DUA Generado")
+            st.markdown(st.session_state["ultimo_material_dua"])
+            
+            # Botón de Descarga en Word (.docx) con cabecera formal
+            try:
+                docx_dua_file = create_docx_from_markdown(
+                    st.session_state["ultimo_material_dua"],
+                    title=f"Prueba / Actividades DUA - {st.session_state.get('ultimo_tema_dua', 'Matemáticas')}",
+                    curso="3º ESO"
+                )
+                st.download_button(
+                    label="⬇️ Descargar Material DUA en Word (.docx)",
+                    data=docx_dua_file,
+                    file_name=f"material_dua_{st.session_state.get('ultimo_tema_dua', 'mates').lower().replace(' ', '_')[:25]}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    key="btn_descarga_docx_dua"
+                )
+            except Exception as e:
+                st.error(f"Error al exportar material DUA a Word: {str(e)}")
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 2: 👥 GENERADOR DE GRUPOS COOPERATIVOS
+    # -------------------------------------------------------------------------
+    with subtab_grupos:
+        st.subheader("👥 Generador de Agrupamientos Cooperativos Heterogéneos")
+        st.markdown("Crea equipos equilibrados pedagógicamente basados en el registro oficial de alumnos (15 estudiantes con perfiles DUA y notas), garantizando la inclusión y la tutoría entre iguales.")
+
+        df_alumnos_grupos = st.session_state["df_alumnos"]
+
+        col_grp1, col_grp2 = st.columns([1, 1])
+        with col_grp1:
+            tipo_agrupamiento = st.selectbox(
+                "Estructura o tamaño del agrupamiento:",
+                [
+                    "Parejas de Tutoría entre Iguales (2 alumnos)",
+                    "Tríos Cooperativos (3 alumnos por equipo)",
+                    "Equipos Cooperativos de 4 alumnos (con asignación de Roles DUA)"
+                ],
+                key="sel_tipo_agrupamiento"
             )
-            st.download_button(
-                label="⬇️ Descargar Material DUA en Word (.docx)",
-                data=docx_dua_file,
-                file_name=f"material_dua_{st.session_state.get('ultimo_tema_dua', 'mates').lower().replace(' ', '_')[:25]}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
-                key="btn_descarga_docx_dua"
+        with col_grp2:
+            actividad_grupos = st.text_input(
+                "Actividad o foco pedagógico del trabajo en equipo:",
+                value="Resolución cooperativa de problemas algebraicos y modelización matemática",
+                key="input_actividad_grupos"
             )
-        except Exception as e:
-            st.error(f"Error al exportar material DUA a Word: {str(e)}")
+
+        restricciones_incompatibilidad = st.text_input(
+            "Restricciones de incompatibilidad o consideraciones especiales (opcional):",
+            placeholder="Ej: No juntar a ALU_02 con ALU_07; emparejar a ALU_04 con alguien paciente de buen rendimiento",
+            key="input_restricciones_grupos"
+        )
+
+        if st.button("✨ Generar Agrupamientos Equilibrados con IA", type="primary", key="btn_generar_grupos"):
+            with st.spinner("Analizando perfiles DUA, calificaciones e incompatibilidades para formar equipos óptimos..."):
+                resumen_para_grupos = df_alumnos_grupos[["ID_Alumno", "Perfil_DUA", "Nota_Media", "Faltas_Acumuladas", "Observaciones_Docente"]].to_string(index=False)
+                
+                prompt_grupos = f"""
+                Actúa como experto en Aprendizaje Cooperativo (modelo Johnson & Johnson, Kagan) y Diseño Universal para el Aprendizaje (DUA) en Secundaria en España.
+                Diseña agrupamientos heterogéneos, inclusivos y pedagógicamente equilibrados para el grupo-clase de 3º de ESO.
+
+                REGISTRO OFICIAL DE ALUMNOS (RGPD ESTRICTO):
+                {resumen_para_grupos}
+
+                PARÁMETROS DEL AGRUPAMIENTO:
+                - Modalidad seleccionada: {tipo_agrupamiento}
+                - Actividad prevista: {actividad_grupos}
+                - Restricciones explícitas del docente: {restricciones_incompatibilidad if restricciones_incompatibilidad.strip() else 'Ninguna restricción añadida'}
+
+                REGLAS CRÍTICAS DE CONSTRUCCIÓN:
+                1. PRIVACIDAD RGPD TOTAL: Emplea ÚNICAMENTE los códigos identificadores ALU_XX. NUNCA inventes nombres ni apellidos reales.
+                2. TODOS LOS ALUMNOS DEBEN ESTAR ASIGNADOS: Los 15 alumnos del registro (desde ALU_01 hasta ALU_15) deben quedar repartidos. Si la división no es exacta (por ejemplo tríos de 15 alumnos da 5 grupos exactos; parejas da 7 parejas y 1 trío; grupos de 4 da 3 grupos de 4 y 1 grupo de 3), explica con claridad la distribución.
+                3. HETEROGENEIDAD Y EQUILIBRIO DUA:
+                   - Cada equipo o pareja debe combinar perfiles complementarios (un alumno con alto rendimiento o altas capacidades junto a alumnos que requieren andamiaje o presentan dificultades como discalculia o refuerzo).
+                   - Evita concentrar alumnos con bajo rendimiento o absentismo en un mismo grupo.
+                4. RESPETO DE RESTRICCIONES: Cumple estrictamente las incompatibilidades indicadas por el profesor.
+                5. ROLES COOPERATIVOS (si son grupos de 3 o 4): Asigna a cada miembro un rol explícito (Coordinador/a, Secretario/a, Portavoz, Supervisor/a de Tiempo y Material) adaptado a su perfil DUA para potenciar sus fortalezas.
+                6. JUSTIFICACIÓN PEDAGÓGICA: Para CADA grupo formado, redacta 2 o 3 líneas explicando por qué esa combinación es potente, qué sinergia se busca y cómo atender a la diversidad dentro del equipo.
+
+                ESTRUCTURA DE RESPUESTA EN MARKDOWN:
+                # 👥 DISTRIBUCIÓN DE EQUIPOS COOPERATIVOS ({tipo_agrupamiento})
+                ## Actividad: {actividad_grupos}
+
+                ### Resumen Global de la Distribución
+                (Breve explicación de la estrategia metodológica adoptada)
+
+                ### Desglose por Equipos
+                Para cada grupo (Equipo 1, Equipo 2...):
+                - **Miembros:** ALU_XX (Perfil, Nota), ALU_YY...
+                - **Roles Asignados:** (si aplica)
+                - **Justificación Pedagógica y Clave DUA:** (Por qué encajan y qué apoyo mutuo se establece)
+                - **Pauta de intervención docente:** (En qué fijarse al pasar por su mesa)
+
+                ### Recomendaciones de Dinamización en el Aula
+                (2 pautas prácticas para gestionar el trabajo en equipo y prevenir bloqueos)
+                """
+
+                system_instruction_grupos = "Eres un formador de docentes especialista en Aprendizaje Cooperativo y DUA en Educación Secundaria en España. Tus propuestas son realistas, inclusivas y respetuosas del RGPD."
+                grupos_generados = call_gemini(prompt_grupos, system_instruction_grupos)
+                st.session_state["ultimos_grupos_cooperativos"] = grupos_generados
+
+        if st.session_state.get("ultimos_grupos_cooperativos"):
+            st.markdown("---")
+            st.markdown("### 📋 Propuesta de Agrupamientos Generada")
+            st.markdown(st.session_state["ultimos_grupos_cooperativos"])
+
+            col_down_g1, col_down_g2 = st.columns([1, 1])
+            with col_down_g1:
+                try:
+                    docx_grupos = create_docx_from_markdown(
+                        st.session_state["ultimos_grupos_cooperativos"],
+                        title="Agrupamientos Cooperativos DUA",
+                        curso="3º ESO"
+                    )
+                    st.download_button(
+                        label="⬇️ Descargar Agrupamientos en Word (.docx)",
+                        data=docx_grupos,
+                        file_name="grupos_cooperativos_3eso.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key="btn_descarga_docx_grupos"
+                    )
+                except Exception as e:
+                    st.caption(f"ℹ️ Exportación a Word no disponible: {str(e)}")
+            with col_down_g2:
+                st.download_button(
+                    label="📄 Descargar Agrupamientos en Texto (.txt)",
+                    data=st.session_state["ultimos_grupos_cooperativos"],
+                    file_name="grupos_cooperativos_3eso.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="btn_descarga_txt_grupos"
+                )
+
+    # -------------------------------------------------------------------------
+    # SUB-PESTAÑA 3: 🎮 CREADOR DE KAHOOTS / QUIZIZZ MATEMÁTICOS
+    # -------------------------------------------------------------------------
+    with subtab_kahoot:
+        st.subheader("🎮 Creador de Cuestionarios Interactivos (Kahoot, Quizizz, Blooket)")
+        st.markdown("Genera preguntas de opción múltiple con **distractores pedagógicos basados en errores típicos** del alumnado de ESO y exportación directa a plantilla CSV oficial.")
+
+        with st.form("form_kahoot"):
+            col_k1, col_k2 = st.columns([2, 1])
+            with col_k1:
+                tema_kahoot = st.text_input(
+                    "Tema o contenido matemático:",
+                    value="Ecuaciones de primer grado, paréntesis y signos negativos",
+                    key="input_tema_kahoot"
+                )
+            with col_k2:
+                curso_kahoot = st.selectbox("Nivel educativo:", ["3º ESO", "1º ESO", "2º ESO", "4º ESO"], index=0, key="sel_curso_kahoot")
+
+            col_k3, col_k4 = st.columns([1, 1])
+            with col_k3:
+                num_preguntas = st.slider("Número de preguntas:", min_value=5, max_value=12, value=6, step=1, key="slider_num_preguntas_kahoot")
+            with col_k4:
+                tiempo_pregunta = st.selectbox("Tiempo por pregunta (segundos):", [20, 30, 45, 60, 90], index=1, key="sel_tiempo_kahoot")
+
+            btn_generar_kahoot = st.form_submit_button("🎲 Generar Cuestionario con Distractores Pedagógicos", type="primary")
+
+        if btn_generar_kahoot:
+            with st.spinner("Diseñando preguntas con distractores basados en errores comunes y estructurando JSON..."):
+                prompt_kahoot = f"""
+                Actúa como profesor experto de Matemáticas de Secundaria en España y diseñador de evaluaciones formativas gamificadas.
+                Genera un cuestionario de {num_preguntas} preguntas tipo test sobre: '{tema_kahoot}' para {curso_kahoot}.
+                Tiempo asignado por pregunta: {tiempo_pregunta} segundos.
+
+                REGLA DIDÁCTICA FUNDAMENTAL (MUY IMPORTANTE):
+                Cada pregunta debe tener EXACTAMENTE 4 opciones de respuesta:
+                - 1 OPCIÓN CORRECTA matemáticamente impecable.
+                - 3 DISTRACTORES ESTRATÉGICOS basados en los ERRORES CONCEPTUALES Y OPERATIVOS TÍPICOS del alumnado de secundaria en este contenido concreto (por ejemplo: olvidar cambiar de signo al pasar al otro miembro, sumar denominadores directamente en fracciones, olvidar elevar los signos en potencias, aplicar mal la distributiva con paréntesis precedidos de signo menos, etc.).
+                - NUNCA inventes números al azar para los distractores: cada error debe reflejar un fallo de razonamiento identificable.
+
+                FORMATO DE SALIDA ESTRICTO (JSON):
+                Debes responder ÚNICA Y EXCLUSIVAMENTE con un bloque de código JSON válido (un array de objetos), sin texto introductorio ni explicaciones fuera del JSON.
+
+                Ejemplo de formato JSON requerido:
+                [
+                  {{
+                    "numero": 1,
+                    "pregunta": "¿Cuál es el valor de x en la ecuación 3(x - 2) = 15?",
+                    "opciones": [
+                      "x = 7",
+                      "x = 3",
+                      "x = 9",
+                      "x = 5"
+                    ],
+                    "correcta": 1,
+                    "tiempo_seg": {tiempo_pregunta},
+                    "analisis_distractores": "Opción 1 es la correcta (3x - 6 = 15 -> 3x = 21 -> x = 7). Opción 2 surge de restar 6 en vez de sumar (15 - 6 = 9 -> 9/3 = 3). Opción 3 surge de olvidar el factor 3 en el paréntesis (x - 6 = 15 o error análogo). Opción 4 surge de dividir 15/3 olvidando el -2."
+                  }}
+                ]
+                """
+
+                system_instruction_kahoot = "Eres un especialista en evaluación formativa matemática y diseño de ítems de opción múltiple con análisis de errores en España. Devuelves únicamente JSON estrictamente válido."
+                raw_kahoot_response = call_gemini(prompt_kahoot, system_instruction_kahoot)
+                st.session_state["ultimo_kahoot_raw"] = raw_kahoot_response
+                st.session_state["ultimo_tema_kahoot"] = tema_kahoot
+
+        if st.session_state.get("ultimo_kahoot_raw"):
+            st.markdown("---")
+            raw_text = st.session_state["ultimo_kahoot_raw"]
+            
+            # Limpiar posible markdown tipo ```json ... ```
+            cleaned_json_text = raw_text
+            json_match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', raw_text, re.DOTALL)
+            if json_match:
+                cleaned_json_text = json_match.group(1)
+            else:
+                json_match_bracket = re.search(r'(\[.*\])', raw_text, re.DOTALL)
+                if json_match_bracket:
+                    cleaned_json_text = json_match_bracket.group(1)
+
+            preguntas_data = []
+            try:
+                preguntas_data = json.loads(cleaned_json_text)
+            except Exception as e:
+                # Si falló la conversión JSON, mostrar texto bruto
+                st.warning("Nota: No se pudo parsear el formato estructurado automático, mostrando salida docente en texto:")
+                st.markdown(raw_text)
+
+            if preguntas_data and isinstance(preguntas_data, list):
+                st.markdown(f"### 🎮 Cuestionario Gamificado: {st.session_state.get('ultimo_tema_kahoot', 'Matemáticas')} ({len(preguntas_data)} preguntas)")
+                st.caption("Revisa cada ítem, comprueba la opción correcta y analiza el fallo conceptual que diagnostica cada distractor.")
+
+                # Renderizar preguntas con expanders visuales
+                for i, item in enumerate(preguntas_data):
+                    q_num = item.get("numero", i + 1)
+                    q_text = item.get("pregunta", f"Pregunta {i+1}")
+                    ops = item.get("opciones", [])
+                    correct_idx = item.get("correcta", 1) # 1-based index
+                    analisis = item.get("analisis_distractores", "")
+
+                    with st.expander(f"❓ Pregunta {q_num}: {q_text}", expanded=(i == 0)):
+                        st.markdown(f"**Enunciado:** {q_text}")
+                        col_o1, col_o2 = st.columns(2)
+                        for o_idx, opcion in enumerate(ops):
+                            is_correct = (o_idx + 1) == correct_idx
+                            col_target = col_o1 if o_idx % 2 == 0 else col_o2
+                            with col_target:
+                                if is_correct:
+                                    st.success(f"✅ **Opción {o_idx + 1}:** {opcion} *(Correcta)*")
+                                else:
+                                    st.info(f"⚪ **Opción {o_idx + 1}:** {opcion}")
+
+                        if analisis:
+                            st.markdown(f"💡 **Diagnóstico del Error (Guía para el Profesor):**\n*{analisis}*")
+
+                # Preparar DataFrame en formato estándar de Kahoot / Quizizz
+                rows_csv = []
+                for item in preguntas_data:
+                    q = item.get("pregunta", "")
+                    ops = item.get("opciones", ["", "", "", ""])
+                    while len(ops) < 4:
+                        ops.append("")
+                    t = item.get("tiempo_seg", tiempo_pregunta)
+                    c = item.get("correcta", 1)
+                    rows_csv.append({
+                        "Question": q,
+                        "Answer 1": ops[0],
+                        "Answer 2": ops[1],
+                        "Answer 3": ops[2],
+                        "Answer 4": ops[3],
+                        "Time limit (sec)": t,
+                        "Correct answer(s)": c
+                    })
+
+                df_kahoot_export = pd.DataFrame(rows_csv)
+                csv_bytes = df_kahoot_export.to_csv(index=False).encode("utf-8")
+
+                st.markdown("---")
+                col_kdown1, col_kdown2 = st.columns([1, 1])
+                with col_kdown1:
+                    st.download_button(
+                        label="📥 Descargar Plantilla Oficial CSV (Kahoot / Quizizz / Blooket)",
+                        data=csv_bytes,
+                        file_name=f"cuestionario_kahoot_{st.session_state.get('ultimo_tema_kahoot', 'mates').lower().replace(' ', '_')[:25]}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="btn_descarga_csv_kahoot"
+                    )
+                with col_kdown2:
+                    st.download_button(
+                        label="📄 Descargar Guion en Texto (.txt)",
+                        data=raw_text,
+                        file_name=f"cuestionario_preguntas_{st.session_state.get('ultimo_tema_kahoot', 'mates').lower().replace(' ', '_')[:25]}.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="btn_descarga_txt_kahoot"
+                    )
+                st.caption("ℹ️ **Cómo importar en Kahoot / Quizizz:** En Kahoot, ve a 'Crear' > 'Importar desde hoja de cálculo' y sube el archivo `.csv` descargado. Las preguntas, alternativas, tiempo y respuesta correcta se cargarán automáticamente.")
 
 
 # =============================================================================
